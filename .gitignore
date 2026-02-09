@@ -1,2 +1,9 @@
-/none_modules
+/node_modules
 .env
+
+claudeflare\
+wrangler.jsonc\
+.wrangler\
+.wrangler
+
+node_modules\
