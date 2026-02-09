@@ -1,9 +1,10 @@
-/node_modules
+# Dependencies
+node_modules/
+
+# Environment
 .env
 
-claudeflare\
-wrangler.jsonc\
-.wrangler\
-.wrangler
-
-node_modules\
+# Cloudflare
+claudeflare/
+wrangler.jsonc
+.wrangler/
