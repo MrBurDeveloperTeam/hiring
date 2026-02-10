@@ -114,6 +114,7 @@ function App() {
           }
         />
         <Route path="/join" element={<JoinOrganization />} />
+        <Route path="/join/:shortCode" element={<JoinOrganization />} />
         <Route
           path="/admin"
           element={

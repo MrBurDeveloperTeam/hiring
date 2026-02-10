@@ -56,3 +56,8 @@ export async function acceptInviteLink(token: string) {
     const result = await workerPost(`/api/organizations/invites/${token}/accept`);
     return result.data;
 }
+
+export async function resolveShortCode(code: string) {
+    const result = await workerGet(`/api/organizations/invites/short/${code}`);
+    return result.data || null;
+}

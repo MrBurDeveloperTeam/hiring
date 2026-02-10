@@ -121,7 +121,7 @@ export default function OrganizationTeam() {
         setIsGeneratingLink(true);
         try {
             const data = await createInviteLink(org.id, 'hr', linkExpiration);
-            const link = `${window.location.origin}/join?token=${data.token}`;
+            const link = `${window.location.origin}/join/${data.short_code}`;
             setGeneratedLink(link);
             showToast('Link generated successfully!');
         } catch (err: any) {

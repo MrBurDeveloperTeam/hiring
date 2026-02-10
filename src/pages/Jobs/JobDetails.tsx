@@ -5,11 +5,11 @@ import { Badge } from '../../components/ui/badge';
 import { TagPill } from '../../components/TagPill';
 import { Button } from '../../components/ui/button';
 import { ApplyModal } from '../../components/ApplyModal';
-import { Building2, MapPin, Share2, ShieldCheck, Sparkles, Star, Wallet, Check } from 'lucide-react';
+import { Building2, MapPin, Share2, ShieldCheck, Sparkles, Star, Wallet, Check, Trash2 } from 'lucide-react';
 import { Job } from '../../lib/types';
 import { timeAgo } from '../../lib/utils';
 import { Breadcrumbs } from '../../components/Breadcrumbs';
-import { getJobById, getJobBySlug, getJobs, saveJob, unsaveJob, getSavedJobs } from '../../lib/api/jobs';
+import { getJobById, getJobBySlug, getJobs, saveJob, unsaveJob, getSavedJobs, deleteJob } from '../../lib/api/jobs';
 import { getUserDocuments } from '../../lib/api/profiles';
 
 import { getApplications } from '../../lib/api/applications';
@@ -18,6 +18,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Toast } from '../../components/ui/toast';
 
 import { ShareModal } from '../../components/ShareModal';
+import { getUsersOrganizations } from '../../lib/api/organizations';
 
 export default function JobDetails() {
   const { slug } = useParams<{ slug: string }>();
@@ -34,6 +35,23 @@ export default function JobDetails() {
   const [hasApplied, setHasApplied] = useState(false);
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [userOrgId, setUserOrgId] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadOrg() {
+      if (user && userRole === 'employer') {
+        try {
+          const orgs = await getUsersOrganizations(user.id);
+          if (orgs && orgs.length > 0) {
+            setUserOrgId(orgs[0].id);
+          }
+        } catch (err) {
+          console.error("Failed to load user org", err);
+        }
+      }
+    }
+    loadOrg();
+  }, [user, userRole]);
 
   useEffect(() => {
     async function loadJob() {
@@ -118,6 +136,10 @@ export default function JobDetails() {
   const handleToggleSave = async () => {
     if (!job) return;
     if (!user || userRole !== 'seeker') {
+      if (userRole === 'employer') {
+        // Employers shouldn't be clicking save, but just in case
+        return;
+      }
       openAuthModal('login', window.location.pathname);
       return;
     }
@@ -140,6 +162,23 @@ export default function JobDetails() {
       setIsSaved(!newSavedState); // Revert
       setToastMessage('Failed to update saved status');
       setToastOpen(true);
+    }
+  };
+
+  const handleDeleteJob = async () => {
+    if (!job) return;
+
+    if (window.confirm('Are you sure you want to delete this job posting? This action cannot be undone.')) {
+      try {
+        await deleteJob(job.id);
+        setToastMessage('Job deleted successfully');
+        setToastOpen(true);
+        navigate('/employer/dashboard');
+      } catch (error) {
+        console.error('Error deleting job:', error);
+        setToastMessage('Failed to delete job');
+        setToastOpen(true);
+      }
     }
   };
 
@@ -166,6 +205,8 @@ export default function JobDetails() {
       </AppShell>
     );
   }
+
+  const isOwner = userRole === 'employer' && userOrgId === job.orgId;
 
   return (
     <AppShell padded background="muted">
@@ -280,33 +321,59 @@ export default function JobDetails() {
             <p className="text-sm font-semibold text-gray-900">Ready to apply?</p>
             <p className="text-sm text-gray-600">Submit your resume with screening answers.</p>
             <div className="mt-4 flex flex-col gap-2">
-              <Button
-                variant={hasApplied ? "outline" : "primary"}
-                rightIcon={hasApplied ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-                disabled={hasApplied}
-                onClick={() => {
-                  if (hasApplied) return;
+              {(!user || userRole === 'seeker') && (
+                <Button
+                  variant={hasApplied ? "outline" : "primary"}
+                  rightIcon={hasApplied ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+                  disabled={hasApplied}
+                  onClick={() => {
+                    if (hasApplied) return;
 
-                  if (!user || userRole !== 'seeker') {
-                    if (id) {
-                      openAuthModal('login', `/jobs/${id}`);
-                    } else {
-                      openAuthModal('login', '/jobs');
+                    if (!user || userRole !== 'seeker') {
+                      if (id) {
+                        openAuthModal('login', window.location.pathname);
+                      } else {
+                        openAuthModal('login', '/jobs');
+                      }
+                      return;
                     }
-                    return;
-                  }
 
-                  setShowApply(true);
-                }}
-              >
-                {hasApplied ? 'Applied' : 'Quick apply'}
-              </Button>
-              <Button
-                variant={isSaved ? "primary" : "outline"}
-                onClick={handleToggleSave}
-              >
-                {isSaved ? 'Saved' : 'Save job'}
-              </Button>
+                    setShowApply(true);
+                  }}
+                >
+                  {hasApplied ? 'Applied' : 'Quick apply'}
+                </Button>
+              )}
+
+              {isOwner ? (
+                <div className="flex gap-2">
+                  <Button
+                    variant="primary"
+                    onClick={() => navigate(`/employer/jobs/${job.slug}/edit`)}
+                    className="flex-1"
+                  >
+                    Edit Job
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleDeleteJob}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                    title="Delete Job"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                (userRole === 'seeker' || !user) && (
+                  <Button
+                    variant={isSaved ? "primary" : "outline"}
+                    onClick={handleToggleSave}
+                  >
+                    {isSaved ? 'Saved' : 'Save job'}
+                  </Button>
+                )
+              )}
+
               <Button
                 variant="ghost"
                 icon={<Share2 className="h-4 w-4" />}
