@@ -1,20 +1,10 @@
-import { supabase } from '../supabase';
-import { Education } from '../types';
-import { toPostgresDate } from '../utils';
+import { workerGet, workerPost } from './apiClient';
+import type { Education } from '../types';
 
 export async function getEducation(userId: string): Promise<Education[]> {
-    const { data, error } = await (supabase as any)
-        .from('education')
-        .select('*')
-        .eq('job_seeker_id', userId)
-        .order('start_date', { ascending: false });
+    const result = await workerGet(`/api/education?userId=${userId}`);
 
-    if (error) {
-        console.error('Error fetching education:', error);
-        return [];
-    }
-
-    return data.map((item: any) => ({
+    return (result.data || []).map((item: any) => ({
         id: item.id,
         institutionName: item.institution_name,
         degree: item.degree,
@@ -26,24 +16,18 @@ export async function getEducation(userId: string): Promise<Education[]> {
     }));
 }
 
-export async function addEducation(userId: string, edu: Omit<Education, 'id'>) {
-    const { data, error } = await (supabase as any)
-        .from('education')
-        .insert({
-            job_seeker_id: userId,
-            institution_name: edu.institutionName,
-            degree: edu.degree,
-            field_of_study: edu.fieldOfStudy,
-            start_date: toPostgresDate(edu.startDate),
-            end_date: toPostgresDate(edu.endDate),
-            is_current: edu.isCurrent,
-            description: edu.description,
-        })
-        .select()
-        .single();
+export async function addEducation(_userId: string, edu: Omit<Education, 'id'>) {
+    const result = await workerPost('/api/education', {
+        institutionName: edu.institutionName,
+        degree: edu.degree,
+        fieldOfStudy: edu.fieldOfStudy,
+        startDate: edu.startDate,
+        endDate: edu.endDate,
+        isCurrent: edu.isCurrent,
+        description: edu.description,
+    });
 
-    if (error) throw error;
-
+    const data = result.data as any;
     return {
         id: data.id,
         institutionName: data.institution_name,
@@ -57,28 +41,19 @@ export async function addEducation(userId: string, edu: Omit<Education, 'id'>) {
 }
 
 export async function updateEducation(id: string, edu: Partial<Education>) {
-    const updates: any = {};
-    if (edu.institutionName !== undefined) updates.institution_name = edu.institutionName;
-    if (edu.degree !== undefined) updates.degree = edu.degree;
-    if (edu.fieldOfStudy !== undefined) updates.field_of_study = edu.fieldOfStudy;
-    if (edu.startDate !== undefined) updates.start_date = toPostgresDate(edu.startDate);
-    if (edu.endDate !== undefined) updates.end_date = toPostgresDate(edu.endDate);
-    if (edu.isCurrent !== undefined) updates.is_current = edu.isCurrent;
-    if (edu.description !== undefined) updates.description = edu.description;
-
-    const { error } = await (supabase as any)
-        .from('education')
-        .update(updates)
-        .eq('id', id);
-
-    if (error) throw error;
+    const { workerPut } = await import('./apiClient');
+    await workerPut(`/api/education/${id}`, {
+        institutionName: edu.institutionName,
+        degree: edu.degree,
+        fieldOfStudy: edu.fieldOfStudy,
+        startDate: edu.startDate,
+        endDate: edu.endDate,
+        isCurrent: edu.isCurrent,
+        description: edu.description,
+    });
 }
 
 export async function deleteEducation(id: string) {
-    const { error } = await (supabase as any)
-        .from('education')
-        .delete()
-        .eq('id', id);
-
-    if (error) throw error;
+    const { workerDelete } = await import('./apiClient');
+    await workerDelete(`/api/education/${id}`);
 }

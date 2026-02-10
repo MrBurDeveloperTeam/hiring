@@ -1,7 +1,6 @@
-import { supabase } from '../supabase';
+import { workerGet, workerPost, workerPut, workerDelete, workerFetch } from './apiClient';
 import type { Database } from '../database.types';
 import type { Job } from '../types';
-import { getJobIdFromSlug } from '../utils';
 
 type JobRow = Database['public']['Tables']['jobs']['Row'];
 type OrganizationRow = Database['public']['Tables']['organizations']['Row'];
@@ -79,168 +78,59 @@ export async function getJobs(filters?: {
   page?: number;
   limit?: number;
 }): Promise<{ data: Job[]; count: number }> {
-  const page = filters?.page || 1;
-  const limit = filters?.limit || 6;
-  const offset = (page - 1) * limit;
+  const params = new URLSearchParams();
 
-  let query = supabase
-    .from('jobs')
-    .select(`
-      *,
-      organizations (
-        id,
-        org_name,
-        city,
-        country,
-        logo_url
-      )
-    `, { count: 'exact' });
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.keyword) params.set('keyword', filters.keyword);
+  if (filters?.location) params.set('location', filters.location);
+  if (filters?.specialty) params.set('specialty', filters.specialty);
+  if (filters?.employmentType) params.set('employmentType', filters.employmentType);
+  if (filters?.experienceLevel) params.set('experienceLevel', filters.experienceLevel);
+  if (filters?.salaryMin) params.set('salaryMin', String(filters.salaryMin));
+  if (filters?.newGrad) params.set('newGrad', 'true');
+  if (filters?.training) params.set('training', 'true');
+  if (filters?.internship) params.set('internship', 'true');
+  if (filters?.orgId) params.set('orgId', filters.orgId);
+  if (filters?.page) params.set('page', String(filters.page));
+  if (filters?.limit) params.set('limit', String(filters.limit));
 
-  if (filters?.status) {
-    query = query.eq('status', filters.status);
-  }
+  const query = params.toString();
+  const path = `/api/jobs${query ? `?${query}` : ''}`;
 
-  if (filters?.keyword) {
-    query = query.or(`title.ilike.%${filters.keyword}%,description.ilike.%${filters.keyword}%`);
-  }
+  const result = await workerGet(path);
 
-  if (filters?.location) {
-    // Search in job city/country OR organization city/country requires a joined filter which is complex in simple queries.
-    // For performance, we'll search base columns on jobs table first.
-    query = query.or(`city.ilike.%${filters.location}%,country.ilike.%${filters.location}%`);
-  }
-
-  if (filters?.specialty) {
-    query = query.contains('specialty_tags', [filters.specialty]);
-  }
-
-  if (filters?.salaryMin) {
-    // Assuming legacy string parsing is handled on insertion, we rely on numeric columns
-    query = query.gte('salary_max', filters.salaryMin);
-  }
-
-  if (filters?.newGrad) {
-    query = query.eq('new_grad_welcome', true);
-  }
-
-  if (filters?.training) {
-    query = query.eq('training_provided', true);
-  }
-
-  if (filters?.internship) {
-    query = query.eq('internship_available', true);
-  }
-
-  if (filters?.orgId) {
-    query = query.eq('org_id', filters.orgId);
-  }
-
-  if (filters?.employmentType && filters.employmentType !== '') {
-    const empTypeMap: Record<string, string> = {
-      'Full-time': 'full_time',
-      'Part-time': 'part_time',
-      'Internship': 'internship',
-      'Contract': 'contract',
-      'Temporary': 'temporary',
-    };
-    query = query.eq('employment_type', (empTypeMap[filters.employmentType] || filters.employmentType) as Database['public']['Enums']['employment_type']);
-  }
-
-  if (filters?.experienceLevel && filters.experienceLevel !== '') {
-    const expLevelMap: Record<string, string> = {
-      'New Grad': 'entry',
-      'Junior': 'junior',
-      'Mid': 'mid',
-      'Senior': 'senior',
-    };
-    query = query.eq('experience_level', (expLevelMap[filters.experienceLevel] || filters.experienceLevel) as Database['public']['Enums']['experience_level']);
-  }
-
-  const { data, error, count } = await query
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
-
-  if (error) {
-    console.error('Error fetching jobs:', error);
-    throw error;
-  }
-
-  const jobs = (data || []).map((item: any) => {
+  const jobs = (result.data || []).map((item: any) => {
     const org = Array.isArray(item.organizations) ? item.organizations[0] : item.organizations;
     return mapJobToFrontend(item, org);
   });
 
-  return { data: jobs, count: count || 0 };
+  return { data: jobs, count: result.data?.length || 0 };
 }
 
 export async function getJobById(id: string): Promise<Job | null> {
-  const { data, error } = await supabase
-    .from('jobs')
-    .select(`
-      *,
-      organizations (
-        id,
-        org_name,
-        city,
-        country,
-        logo_url
-      )
-    `)
-    .eq('id', id)
-    .single();
+  try {
+    const result = await workerGet(`/api/jobs/${id}`);
+    if (!result.job) return null;
 
-  if (error) {
-    console.error('Error fetching job:', error);
+    const job = result.job as any;
+    const org = Array.isArray(job.organizations) ? job.organizations[0] : job.organizations;
+    return mapJobToFrontend(job, org);
+  } catch {
     return null;
   }
-
-  const org = Array.isArray((data as any).organizations) ? (data as any).organizations[0] : (data as any).organizations;
-  return mapJobToFrontend(data, org);
 }
 
 export async function getJobBySlug(slug: string): Promise<Job | null> {
-  const selectQuery = `
-      *,
-      organizations (
-        id,
-        org_name,
-        city,
-        country,
-        logo_url
-      )
-    `;
+  try {
+    const result = await workerGet(`/api/jobs/slug/${encodeURIComponent(slug)}`);
+    if (!result.job) return null;
 
-  // 1. Try finding by exact slug match
-  const { data: slugData } = await supabase
-    .from('jobs')
-    .select(selectQuery)
-    .eq('slug', slug)
-    .single();
-
-  if (slugData) {
-    const org = Array.isArray((slugData as any).organizations) ? (slugData as any).organizations[0] : (slugData as any).organizations;
-    return mapJobToFrontend(slugData, org);
+    const job = result.job as any;
+    const org = Array.isArray(job.organizations) ? job.organizations[0] : job.organizations;
+    return mapJobToFrontend(job, org);
+  } catch {
+    return null;
   }
-
-  // 2. If not found, try extracting ID (for legacy URLs or un-slugged jobs)
-  // Check if the input looks like a UUID or contains one at the end
-  const potentialId = getJobIdFromSlug(slug);
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-  if (uuidRegex.test(potentialId)) {
-    const { data: idData, error } = await supabase
-      .from('jobs')
-      .select(selectQuery)
-      .eq('id', potentialId)
-      .single();
-
-    if (idData) {
-      const org = Array.isArray((idData as any).organizations) ? (idData as any).organizations[0] : (idData as any).organizations;
-      return mapJobToFrontend(idData, org);
-    }
-  }
-
-  return null;
 }
 
 export async function createJob(jobData: {
@@ -266,163 +156,56 @@ export async function createJob(jobData: {
   status?: Database['public']['Enums']['job_status'];
   slug: string;
 }): Promise<Job> {
-  const { data, error } = await supabase
-    .from('jobs')
-    .insert({
-      ...jobData,
-      status: jobData.status || 'draft',
-      specialty_tags: jobData.specialty_tags || [],
-      benefits: jobData.benefits || {},
-    })
-    .select(`
-      *,
-      organizations (
-        id,
-        org_name,
-        city,
-        country,
-        logo_url
-      )
-    `)
-    .single();
-
-  if (error) {
-    console.error('Error creating job:', error);
-    throw error;
-  }
-
-  const org = Array.isArray((data as any).organizations) ? (data as any).organizations[0] : (data as any).organizations;
+  const result = await workerPost('/api/jobs', jobData);
+  const data = result.data as any;
+  const org = Array.isArray(data.organizations) ? data.organizations[0] : data.organizations;
   return mapJobToFrontend(data, org);
 }
 
 export async function updateJobStatus(id: string, status: Database['public']['Enums']['job_status']): Promise<void> {
-  const updateData: any = { status, updated_at: new Date().toISOString() };
-
-  if (status === 'published' && !updateData.published_at) {
-    updateData.published_at = new Date().toISOString();
-  }
-
-  if (status === 'closed') {
-    updateData.closed_at = new Date().toISOString();
-  }
-
-  const { error } = await supabase
-    .from('jobs')
-    .update(updateData)
-    .eq('id', id);
-
-  if (error) {
-    console.error('Error updating job status:', error);
-    throw error;
-  }
+  await workerPut(`/api/jobs/${id}/status`, { status });
 }
 
-export async function saveJob(userId: string, jobId: string): Promise<void> {
-  const { error } = await supabase
-    .from('job_saves')
-    .insert({ user_id: userId, job_id: jobId });
-
-  if (error) {
-    // Ignore duplicate key error (already saved)
-    if (error.code === '23505') return;
-    console.error('Error saving job:', error);
-    throw error;
-  }
+export async function saveJob(_userId: string, jobId: string): Promise<void> {
+  await workerPost(`/api/jobs/${jobId}/save`);
 }
 
-export async function unsaveJob(userId: string, jobId: string): Promise<void> {
-  const { error } = await supabase
-    .from('job_saves')
-    .delete()
-    .eq('user_id', userId)
-    .eq('job_id', jobId);
-
-  if (error) {
-    console.error('Error unsaving job:', error);
-    throw error;
-  }
+export async function unsaveJob(_userId: string, jobId: string): Promise<void> {
+  await workerDelete(`/api/jobs/${jobId}/save`);
 }
 
-export async function getSavedJobs(userId: string): Promise<Job[]> {
-  const { data, error } = await supabase
-    .from('job_saves')
-    .select(`
-      job_id,
-      jobs (
-        *,
-        organizations (
-          id,
-          org_name,
-          city,
-          country,
-          logo_url
-        )
-      )
-    `)
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+export async function getSavedJobs(_userId: string): Promise<Job[]> {
+  const result = await workerGet('/api/jobs/saved');
 
-  if (error) {
-    console.error('Error fetching saved jobs:', error);
-    throw error;
-  }
-
-  return (data || []).map((item: any) => {
-    const job = item.jobs;
-    // Handle nested arrays if necessary (though single relation)
-    const jobData = Array.isArray(job) ? job[0] : job;
-    const org = Array.isArray(jobData.organizations) ? jobData.organizations[0] : jobData.organizations;
-    return mapJobToFrontend(jobData, org);
+  return (result.data || []).map((item: any) => {
+    const jobData = item.jobs;
+    const job = Array.isArray(jobData) ? jobData[0] : jobData;
+    const org = Array.isArray(job?.organizations) ? job.organizations[0] : job?.organizations;
+    return mapJobToFrontend(job, org);
   });
 }
 
-export async function hideJob(userId: string, jobId: string): Promise<void> {
-  const { error } = await supabase
-    .from('job_hides')
-    .insert({ user_id: userId, job_id: jobId });
-
-  if (error) {
-    if (error.code === '23505') return; // Already hidden
-    console.error('Error hiding job:', error);
-    throw error;
-  }
+export async function hideJob(_userId: string, jobId: string): Promise<void> {
+  await workerPost(`/api/jobs/${jobId}/hide`);
 }
 
-export async function unhideJob(userId: string, jobId: string): Promise<void> {
-  const { error } = await supabase
-    .from('job_hides')
-    .delete()
-    .eq('user_id', userId)
-    .eq('job_id', jobId);
-
-  if (error) {
-    console.error('Error unhiding job:', error);
-    throw error;
-  }
+export async function unhideJob(_userId: string, jobId: string): Promise<void> {
+  await workerDelete(`/api/jobs/${jobId}/hide`);
 }
 
-export async function getHiddenJobIds(userId: string): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('job_hides')
-    .select('job_id')
-    .eq('user_id', userId);
-
-  if (error) {
-    console.error('Error fetching hidden jobs:', error);
-    return [];
-  }
-
-  return data.map((item: any) => item.job_id);
+export async function getHiddenJobIds(_userId: string): Promise<string[]> {
+  const result = await workerGet('/api/jobs/hidden');
+  return result.data || [];
 }
 
 export async function deleteJob(jobId: string): Promise<void> {
-  const { error } = await supabase
-    .from('jobs')
-    .delete()
-    .eq('id', jobId);
+  await workerDelete(`/api/jobs/${jobId}`);
+}
 
-  if (error) {
-    console.error('Error deleting job:', error);
-    throw error;
-  }
+// Re-export updateJob for general updates (used by PostJob page)
+export async function updateJob(jobId: string, jobData: any): Promise<Job> {
+  const result = await workerPut(`/api/jobs/${jobId}`, jobData);
+  const data = result.data as any;
+  const org = Array.isArray(data?.organizations) ? data.organizations[0] : data?.organizations;
+  return mapJobToFrontend(data, org);
 }

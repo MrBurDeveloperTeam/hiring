@@ -1,38 +1,21 @@
-import { supabase } from '../supabase';
-import { Database } from '../database.types';
+import { workerGet } from './apiClient';
 
 export async function getOrganizationByName(orgName: string) {
-    const { data, error } = await supabase
-        .from('organizations')
-        .select('*')
-        .ilike('org_name', orgName) // Case-insensitive match
-        .single();
-
-    if (error) {
-        console.error('Error fetching organization by name:', error);
+    try {
+        const result = await workerGet(`/api/organizations?name=${encodeURIComponent(orgName)}`);
+        return result.data || null;
+    } catch {
+        console.error('Error fetching organization by name via worker');
         return null;
     }
-
-    return data;
 }
 
 export async function getOrganizationById(orgId: string) {
-    const { data, error } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('id', orgId)
-        .single();
-
-    if (error) {
-        console.error('Error fetching organization by ID:', error);
+    try {
+        const result = await workerGet(`/api/organizations/${orgId}`);
+        return result.data || null;
+    } catch {
+        console.error('Error fetching organization by ID via worker');
         return null;
     }
-
-    return data;
 }
-
-// Re-export existing ones if needed or keep separate.
-// Ideally we should consolidate, but for now this new file handles the public fetch needs.
-// The existing `getUsersOrganizations` was in `organizations.ts` (wait, I haven't seen that file?
-// The JobProfile used `import ... from '../../lib/api/organizations'`.
-// Ah, I should check if that file exists first! I might be overwriting or duplicating.)

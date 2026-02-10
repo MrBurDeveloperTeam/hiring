@@ -1,14 +1,24 @@
 import { APP_CONFIG } from "./config/apps.js";
 import { parseJwtPayload, extractEmail } from "./auth/odooJwt.js";
-import { getProfileByEmail } from "./supabase/profiles.js";
-import { getInventoryMetaByUserId } from "./supabase/inventoryMeta.js";
-import { supabaseBootstrapByEmail } from "./supabase/bootstrap.js";
-import { inventoryFullSync } from "./supabase/inventorySync.js";
-import { getAppointments } from "./supabase/appointments.js";
-import { upsertInventoryMeta } from "./supabase/upsertInventory.Meta.js";
-import { handleWhiteboardApi } from "./supabase/whiteboard.js";
-import { handleTasksApi } from "./supabase/tasks.js";
+import { getProfileByEmail } from "./supabase/profile.js";
+// import { getInventoryMetaByUserId } from "./supabase/inventoryMeta.js";
+// import { supabaseBootstrapByEmail } from "./supabase/bootstrap.js";
+// import { inventoryFullSync } from "./supabase/inventorySync.js";
+// import { getAppointments, updateAppointment, deleteAppointment, createAppointment } from "./supabase/appointments.js";
+// import { searchPatients, createPatient, getPatients, updatePatient, deletePatient } from "./supabase/patients.js";
+// import { getStaff, createStaff, updateStaff, deleteStaff } from "./supabase/staff.js";
+// import { getRooms, createRoom, updateRoom, deleteRoom } from "./supabase/rooms.js";
+// import { getTreatments, createTreatment, updateTreatment, deleteTreatment } from "./supabase/treatments.js";
+// import { getSettings, saveSettings } from "./supabase/settings.js";
+// import { getHolidays, addHoliday, updateHoliday, deleteHoliday } from "./supabase/holidays.js";
+// import { getActivity, addActivity } from "./supabase/activity.js";
+// import { handleWhiteboardApi } from "./supabase/whiteboard.js";
+// import { handleTasksApi } from "./supabase/tasks.js";
+// import { getRequests, updateRequest } from "./supabase/requests.js";
+// import { getClinics, getClinicById, addClinic, updateClinic, deleteClinic } from "./supabase/clinics.js";
+// import { getProfiles, getProfileById, updateProfile } from "./supabase/apt_profiles.js";
 import { handleHiringApi } from "./supabase/hiring.js";
+
 
 export default {
   async fetch(request, env) {
@@ -31,6 +41,7 @@ export default {
       "https://event.mrburstudio.com",
       "https://recruitment.mrburstudio.com",
       "http://localhost:3000",
+      "http://localhost:5173",
     ]);
 
     const isApi = url.pathname.startsWith("/api/");
@@ -175,33 +186,45 @@ export default {
     }
 
     /* ==============================
-       API: GET /api/appointments
-       ============================== */
-    if (url.pathname === "/api/appointments") {
-      const auth = request.headers.get("Authorization");
-      if (!auth?.startsWith("Bearer ")) {
-        return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+       SSO: Get app launch link (proxy to Odoo)
+       POST /api/v1/sso/app_link
+    ================================= */
+    if (url.pathname === "/api/v1/sso/app_link") {
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: corsHeaders });
       }
-      // Security: Validate Token
-      const token = auth.slice(7);
-      let payload;
+
+      if (request.method !== "POST") {
+        return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
+      }
+
       try {
-        payload = parseJwtPayload(token);
-        if (payload?.exp && payload.exp * 1000 < Date.now()) throw new Error("expired");
-      } catch {
-        return new Response("Invalid Token", { status: 401, headers: corsHeaders });
-      }
-      const clinicId = url.searchParams.get("clinicId");
-      if (!clinicId) {
-        return new Response("Missing clinicId", { status: 400, headers: corsHeaders });
-      }
-      try {
-        const data = await getAppointments(env, clinicId);
-        return new Response(JSON.stringify(data), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
+
+        const bodyText = await request.text(); // keep raw JSON
+        const upstreamUrl = "https://mrbur-sandbox.odoo.com/api/v1/sso/app_link";
+
+        const upstreamRes = await fetch(upstreamUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "X-SSO-API-KEY": env.ODOO_SSO_API_KEY, // forward to Odoo
+          },
+          body: bodyText,
         });
-      } catch (e) {
-        return new Response(JSON.stringify({ error: e.message }), {
+
+        const upstreamText = await upstreamRes.text();
+
+        // pass-through response (recommended)
+        return new Response(upstreamText, {
+          status: upstreamRes.status,
+          headers: {
+            "Content-Type": upstreamRes.headers.get("Content-Type") || "application/json",
+            ...corsHeaders,
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ ok: false, error: err?.message || "SSO app_link failed" }), {
           status: 500,
           headers: { "Content-Type": "application/json", ...corsHeaders },
         });
@@ -209,31 +232,634 @@ export default {
     }
 
     /* ==============================
-       API: POST /api/inventory/sync
-       ============================== */
-    if (url.pathname === "/api/inventory/sync" && request.method === "POST") {
-      // ✅ Cookie-based auth
-      const token = getTokenFromRequest(request);
-      if (!token) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
-
-      const decoded = decodeAndValidateToken(token);
-      if (!decoded.ok) {
-        return new Response("Unauthorized", {
-          status: 401,
-          headers: {
-            ...(decoded.error === "expired" ? { "Set-Cookie": buildClearCookie() } : {}),
-            ...corsHeaders,
-          },
-        });
+   authenticate web session
+================================= */
+    if (url.pathname === "/api/web/session/authenticate") {
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: corsHeaders });
       }
 
-      const body = await request.json();
-      await inventoryFullSync(env, body);
+      if (request.method !== "POST") {
+        return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
+      }
 
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
+      try {
+        const body = await request.json();
+
+        const login = body?.params?.login;
+        const password = body?.params?.password;
+
+        if (!login || !password) {
+          return new Response(JSON.stringify({ ok: false, error: "Missing email or password" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+
+        const ODOO_BASE = "https://mrbur-sandbox.odoo.com";
+        const DB = "mrbur-staging-bur-26090883";
+
+        const upstream = await fetch(`${ODOO_BASE}/web/session/authenticate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            method: "call",
+            params: {
+              db: DB,
+              login,
+              password,
+            },
+            id: body?.id ?? 1,
+          }),
+        });
+
+        const data = await upstream.json().catch(() => null);
+
+        if (!upstream.ok) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "Upstream Odoo error", status: upstream.status, data }),
+            { status: 502, headers: { "Content-Type": "application/json", ...corsHeaders } }
+          );
+        }
+
+        if (data?.error) {
+          return new Response(
+            JSON.stringify({ ok: false, error: data.error.message || "Odoo login failed", data }),
+            { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+          );
+        }
+
+        // ✅ Odoo success payload is in data.result
+        const result = data?.result;
+
+        // ✅ Forward Odoo session cookies (important for session auth)
+        const setCookie = upstream.headers.get("Set-Cookie");
+
+        // ✅ This is the key change: return sessionInfo so frontend can do result.sessionInfo.name
+        return new Response(
+          JSON.stringify({
+            ok: true,
+
+            // 👇 what your frontend expects
+            sessionInfo: {
+              name: result?.name ?? result?.partner_display_name ?? "",
+              email: result?.username ?? login,
+              uid: result?.uid ?? null,
+              partner_id: result?.partner_id ?? null,
+              db: result?.db ?? DB,
+            },
+
+            // 👇 keep raw Odoo payload too (optional but useful for debugging)
+            data,
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+              ...(setCookie ? { "Set-Cookie": setCookie } : {}),
+              ...corsHeaders,
+            },
+          }
+        );
+      } catch (err) {
+        return new Response(JSON.stringify({ ok: false, error: err?.message || "Odoo login failed" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+    }
+
+
+    /* ==============================
+      Create user in Odoo
+    =================================*/
+    // ✅ API: POST /api/v1/users -> forward to Odoo sandbox
+    if (url.pathname === "/api/v1/users") {
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: corsHeaders });
+      }
+
+      if (request.method !== "POST") {
+        return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
+      }
+
+      const upstreamUrl = "https://mrbur-sandbox.odoo.com/api/v1/users";
+
+      const upstreamRes = await fetch(upstreamUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-SSO-API-KEY": env.ODOO_SSO_API_KEY,
+        },
+        body: await request.text(),
+      });
+
+      return new Response(await upstreamRes.text(), {
+        status: upstreamRes.status,
+        headers: {
+          "Content-Type": upstreamRes.headers.get("Content-Type") || "application/json",
+          ...corsHeaders,
+        },
       });
     }
+
+    // /* ==============================
+    //    API: /api/appointments
+    //    ============================== */
+    // if (url.pathname === "/api/appointments") {
+    //   const auth = request.headers.get("Authorization");
+    //   if (!auth?.startsWith("Bearer ")) {
+    //     return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    //   }
+    //   // Security: Validate Token
+    //   const token = auth.slice(7);
+    //   let payload;
+    //   try {
+    //     payload = parseJwtPayload(token);
+    //     if (payload?.exp && payload.exp * 1000 < Date.now()) throw new Error("expired");
+    //   } catch {
+    //     return new Response("Invalid Token", { status: 401, headers: corsHeaders });
+    //   }
+    //   try {
+    //     // GET (List)
+    //     if (request.method === "GET") {
+    //       const clinicId = url.searchParams.get("clinicId");
+    //       if (!clinicId) throw new Error("Missing clinicId");
+
+    //       const data = await getAppointments(env, clinicId);
+    //       return new Response(JSON.stringify(data), {
+    //         headers: { "Content-Type": "application/json", ...corsHeaders },
+    //       });
+    //     }
+    //     // POST (Create)
+    //     if (request.method === "POST") {
+    //       const body = await request.json();
+    //       const data = await createAppointment(env, body);
+    //       return new Response(JSON.stringify(data), {
+    //         headers: { "Content-Type": "application/json", ...corsHeaders },
+    //       });
+    //     }
+    //     // PATCH (Update)
+    //     if (request.method === "PATCH") {
+    //       const id = url.searchParams.get("id");
+    //       if (!id) throw new Error("Missing ID for update");
+    //       const body = await request.json();
+    //       const data = await updateAppointment(env, id, body);
+    //       return new Response(JSON.stringify(data), {
+    //         headers: { "Content-Type": "application/json", ...corsHeaders },
+    //       });
+    //     }
+    //     // DELETE
+    //     if (request.method === "DELETE") {
+    //       const id = url.searchParams.get("id");
+    //       if (!id) throw new Error("Missing ID for delete");
+    //       await deleteAppointment(env, id);
+    //       return new Response(JSON.stringify({ ok: true }), {
+    //         headers: { "Content-Type": "application/json", ...corsHeaders },
+    //       });
+    //     }
+    //   } catch (e) {
+    //     return new Response(JSON.stringify({ error: e.message }), {
+    //       status: 500,
+    //       headers: { "Content-Type": "application/json", ...corsHeaders },
+    //     });
+    //   }
+    // }
+
+    // /* ==============================
+    //    API: /api/patients
+    //    ============================== */
+    // if (url.pathname === "/api/patients") {
+    //   const auth = request.headers.get("Authorization");
+    //   if (!auth?.startsWith("Bearer ")) {
+    //     return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    //   }
+    //   // Security Check
+    //   const token = auth.slice(7);
+    //   try {
+    //     const payload = parseJwtPayload(token);
+    //     if (payload?.exp && payload.exp * 1000 < Date.now()) throw new Error("expired");
+    //   } catch {
+    //     return new Response("Invalid Token", { status: 401, headers: corsHeaders });
+    //   }
+    //   const clinicId = url.searchParams.get("clinicId");
+
+    //   try {
+    //     // GET (List or Search)
+    //     if (request.method === "GET") {
+    //       if (!clinicId) throw new Error("Missing clinicId");
+    //       const query = url.searchParams.get("query");
+
+    //       let data;
+    //       if (query) {
+    //         data = await searchPatients(env, clinicId, query);
+    //       } else {
+    //         const limit = parseInt(url.searchParams.get("limit") ?? "50");
+    //         const offset = parseInt(url.searchParams.get("offset") ?? "0");
+    //         data = await getPatients(env, clinicId, limit, offset);
+    //       }
+    //       return new Response(JSON.stringify(data), {
+    //         headers: { "Content-Type": "application/json", ...corsHeaders },
+    //       });
+    //     }
+    //     // POST (Create)
+    //     if (request.method === "POST") {
+    //       const body = await request.json();
+    //       const data = await createPatient(env, body);
+    //       return new Response(JSON.stringify(data), {
+    //         headers: { "Content-Type": "application/json", ...corsHeaders },
+    //       });
+    //     }
+    //     // PATCH (Update)
+    //     if (request.method === "PATCH") {
+    //       const id = url.searchParams.get("id");
+    //       if (!id) throw new Error("Missing ID");
+    //       const body = await request.json();
+    //       const data = await updatePatient(env, id, body);
+    //       return new Response(JSON.stringify(data), {
+    //         headers: { "Content-Type": "application/json", ...corsHeaders },
+    //       });
+    //     }
+    //     // DELETE
+    //     if (request.method === "DELETE") {
+    //       const id = url.searchParams.get("id");
+    //       if (!id) throw new Error("Missing ID");
+    //       await deletePatient(env, id);
+    //       return new Response(JSON.stringify({ ok: true }), {
+    //         headers: { "Content-Type": "application/json", ...corsHeaders },
+    //       });
+    //     }
+    //   } catch (e) {
+    //     return new Response(JSON.stringify({ error: e.message }), {
+    //       status: 500,
+    //       headers: { "Content-Type": "application/json", ...corsHeaders },
+    //     });
+    //   }
+    // }
+
+    // /* ==============================
+    //    API: /api/staff
+    //    ============================== */
+    // if (url.pathname === "/api/staff") {
+    //   const auth = request.headers.get("Authorization");
+    //   if (!auth?.startsWith("Bearer ")) {
+    //     return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    //   }
+    //   const token = auth.slice(7);
+    //   try {
+    //     const payload = parseJwtPayload(token);
+    //     if (payload?.exp && payload.exp * 1000 < Date.now()) throw new Error("expired");
+    //   } catch {
+    //     return new Response("Invalid Token", { status: 401, headers: corsHeaders });
+    //   }
+    //   const clinicId = url.searchParams.get("clinicId");
+    //   try {
+    //     // GET (List)
+    //     if (request.method === "GET") {
+    //       if (!clinicId) throw new Error("Missing clinicId");
+    //       const data = await getStaff(env, clinicId);
+    //       return new Response(JSON.stringify(data), {
+    //         headers: { "Content-Type": "application/json", ...corsHeaders },
+    //       });
+    //     }
+    //     // POST (Create)
+    //     if (request.method === "POST") {
+    //       const body = await request.json();
+    //       const data = await createStaff(env, body);
+    //       return new Response(JSON.stringify(data), {
+    //         headers: { "Content-Type": "application/json", ...corsHeaders },
+    //       });
+    //     }
+    //     // PATCH (Update)
+    //     if (request.method === "PATCH") {
+    //       const id = url.searchParams.get("id");
+    //       if (!id) throw new Error("Missing ID");
+    //       const body = await request.json();
+    //       const data = await updateStaff(env, id, body);
+    //       return new Response(JSON.stringify(data), {
+    //         headers: { "Content-Type": "application/json", ...corsHeaders },
+    //       });
+    //     }
+    //     // DELETE
+    //     if (request.method === "DELETE") {
+    //       const id = url.searchParams.get("id");
+    //       if (!id) throw new Error("Missing ID");
+    //       await deleteStaff(env, id);
+    //       return new Response(JSON.stringify({ ok: true }), {
+    //         headers: { "Content-Type": "application/json", ...corsHeaders },
+    //       });
+    //     }
+    //   } catch (e) {
+    //     return new Response(JSON.stringify({ error: e.message }), {
+    //       status: 500,
+    //       headers: { "Content-Type": "application/json", ...corsHeaders },
+    //     });
+    //   }
+    // }
+
+    // /* ==============================
+    //    API: /api/rooms
+    //    ============================== */
+    // if (url.pathname === "/api/rooms") {
+    //   const auth = request.headers.get("Authorization");
+    //   if (!auth?.startsWith("Bearer ")) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+
+    //   const token = auth.slice(7);
+    //   try {
+    //     const p = parseJwtPayload(token);
+    //     if (p?.exp && p.exp * 1000 < Date.now()) throw new Error("expired");
+    //   } catch {
+    //     return new Response("Invalid Token", { status: 401, headers: corsHeaders });
+    //   }
+    //   const clinicId = url.searchParams.get("clinicId");
+    //   try {
+    //     if (request.method === "GET") {
+    //       const data = await getRooms(env, clinicId);
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "POST") {
+    //       const data = await createRoom(env, await request.json());
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "PATCH") {
+    //       const id = url.searchParams.get("id");
+    //       const data = await updateRoom(env, id, await request.json());
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "DELETE") {
+    //       const id = url.searchParams.get("id");
+    //       await deleteRoom(env, id);
+    //       return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //   } catch (e) {
+    //     return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //   }
+    // }
+
+    // /* ==============================
+    //     API: /api/treatments
+    //     ============================== */
+    // if (url.pathname === "/api/treatments") {
+    //   const auth = request.headers.get("Authorization");
+    //   if (!auth?.startsWith("Bearer ")) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+
+    //   const token = auth.slice(7);
+    //   try {
+    //     const p = parseJwtPayload(token);
+    //     if (p?.exp && p.exp * 1000 < Date.now()) throw new Error("expired");
+    //   } catch {
+    //     return new Response("Invalid Token", { status: 401, headers: corsHeaders });
+    //   }
+
+    //   const clinicId = url.searchParams.get("clinicId");
+
+    //   try {
+    //     if (request.method === "GET") {
+    //       const data = await getTreatments(env, clinicId);
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "POST") {
+    //       const data = await createTreatment(env, await request.json());
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "PATCH") {
+    //       const id = url.searchParams.get("id");
+    //       const data = await updateTreatment(env, id, await request.json());
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "DELETE") {
+    //       const id = url.searchParams.get("id");
+    //       await deleteTreatment(env, id);
+    //       return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //   } catch (e) {
+    //     return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //   }
+    // }
+
+    // /* ==============================
+    //    API: /api/settings
+    //    ============================== */
+    // if (url.pathname === "/api/settings") {
+    //   const auth = request.headers.get("Authorization");
+    //   if (!auth?.startsWith("Bearer ")) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    //   const token = auth.slice(7);
+    //   try {
+    //     const p = parseJwtPayload(token);
+    //     if (p?.exp && p.exp * 1000 < Date.now()) throw new Error("expired");
+    //   } catch { return new Response("Invalid Token", { status: 401, headers: corsHeaders }); }
+    //   const clinicId = url.searchParams.get("clinicId");
+    //   try {
+    //     if (request.method === "GET") {
+    //       const data = await getSettings(env, clinicId);
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "POST") { // Save/Upsert
+    //       const data = await saveSettings(env, await request.json());
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //   } catch (e) { return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }); }
+    // }
+    // /* ==============================
+    //    API: /api/holidays
+    //    ============================== */
+    // if (url.pathname === "/api/holidays") {
+    //   const auth = request.headers.get("Authorization");
+    //   if (!auth?.startsWith("Bearer ")) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    //   const token = auth.slice(7);
+    //   try {
+    //     const p = parseJwtPayload(token);
+    //     if (p?.exp && p.exp * 1000 < Date.now()) throw new Error("expired");
+    //   } catch { return new Response("Invalid Token", { status: 401, headers: corsHeaders }); }
+    //   const clinicId = url.searchParams.get("clinicId");
+    //   try {
+    //     if (request.method === "GET") {
+    //       const data = await getHolidays(env, clinicId);
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "POST") {
+    //       const data = await addHoliday(env, await request.json());
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "PATCH") {
+    //       const id = url.searchParams.get("id");
+    //       const data = await updateHoliday(env, id, await request.json());
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "DELETE") {
+    //       const id = url.searchParams.get("id");
+    //       await deleteHoliday(env, id);
+    //       return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //   } catch (e) { return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }); }
+    // }
+    // /* ==============================
+    //    API: /api/activity
+    //    ============================== */
+    // if (url.pathname === "/api/activity") {
+    //   const auth = request.headers.get("Authorization");
+    //   if (!auth?.startsWith("Bearer ")) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    //   const token = auth.slice(7);
+    //   try {
+    //     const p = parseJwtPayload(token);
+    //     if (p?.exp && p.exp * 1000 < Date.now()) throw new Error("expired");
+    //   } catch { return new Response("Invalid Token", { status: 401, headers: corsHeaders }); }
+    //   const clinicId = url.searchParams.get("clinicId");
+    //   try {
+    //     if (request.method === "GET") {
+    //       // For admin, clinicId might be missing or special flag. The helper handles it.
+    //       const data = await getActivity(env, clinicId);
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "POST") {
+    //       const data = await addActivity(env, await request.json());
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //   } catch (e) { return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }); }
+    // }
+
+    // /* ==============================
+    //    API: /api/requests
+    //    ============================== */
+    // if (url.pathname === "/api/requests") {
+    //   const auth = request.headers.get("Authorization");
+    //   if (!auth?.startsWith("Bearer ")) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    //   const token = auth.slice(7);
+    //   try {
+    //     const p = parseJwtPayload(token);
+    //     if (p?.exp && p.exp * 1000 < Date.now()) throw new Error("expired");
+    //   } catch { return new Response("Invalid Token", { status: 401, headers: corsHeaders }); }
+    //   const clinicId = url.searchParams.get("clinicId");
+    //   try {
+    //     if (request.method === "GET") {
+    //       const data = await getRequests(env, clinicId);
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "PATCH") {
+    //       const id = url.searchParams.get("id");
+    //       if (!id) throw new Error("Missing ID");
+    //       const data = await updateRequest(env, id, await request.json());
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //   } catch (e) {
+    //     return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //   }
+    // }
+
+    // /* ==============================
+    //  API: /api/clinics
+    //  ============================== */
+    // if (url.pathname === "/api/clinics") {
+    //   const auth = request.headers.get("Authorization");
+    //   if (!auth?.startsWith("Bearer ")) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    //   const token = auth.slice(7);
+    //   try {
+    //     const p = parseJwtPayload(token);
+    //     if (p?.exp && p.exp * 1000 < Date.now()) throw new Error("expired");
+    //   } catch { return new Response("Invalid Token", { status: 401, headers: corsHeaders }); }
+
+    //   try {
+    //     if (request.method === "GET") {
+    //       const id = url.searchParams.get("id");
+    //       if (id) {
+    //         const data = await getClinicById(env, id);
+    //         return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //       }
+    //       const data = await getClinics(env);
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "POST") {
+    //       const data = await addClinic(env, await request.json());
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "PATCH") {
+    //       const id = url.searchParams.get("id");
+    //       const data = await updateClinic(env, id, await request.json());
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //     if (request.method === "DELETE") {
+    //       const id = url.searchParams.get("id");
+    //       await deleteClinic(env, id);
+    //       return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //   } catch (e) {
+    //     return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //   }
+    // }
+
+    // /* ==============================
+    //  API: /api/apt_profiles
+    //  ============================== */
+    // if (url.pathname === "/api/profiles") {
+    //   const auth = request.headers.get("Authorization");
+    //   if (!auth?.startsWith("Bearer ")) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    //   const token = auth.slice(7);
+    //   try {
+    //     const p = parseJwtPayload(token);
+    //     if (p?.exp && p.exp * 1000 < Date.now()) throw new Error("expired");
+    //   } catch { return new Response("Invalid Token", { status: 401, headers: corsHeaders }); }
+
+    //   try {
+    //     if (request.method === "GET") {
+    //       const id = url.searchParams.get("id");
+    //       const email = url.searchParams.get("email");
+
+    //       if (id) {
+    //         const data = await getProfileById(env, id);
+    //         return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //       }
+    //       if (email) {
+    //         const data = await getProfileByEmail(env, email);
+    //         return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //       }
+
+    //       // Default: List all
+    //       const data = await getProfiles(env);
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+
+    //     if (request.method === "PATCH") {
+    //       const id = url.searchParams.get("id");
+    //       if (!id) throw new Error("Missing ID");
+    //       const data = await updateProfile(env, id, await request.json());
+    //       return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //     }
+    //   } catch (e) {
+    //     return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
+    //   }
+    // }
+
+
+    // /* ==============================
+    //    API: POST /api/inventory/sync
+    //    ============================== */
+    // if (url.pathname === "/api/inventory/sync" && request.method === "POST") {
+    //   // ✅ Cookie-based auth
+    //   const token = getTokenFromRequest(request);
+    //   if (!token) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+
+    //   const decoded = decodeAndValidateToken(token);
+    //   if (!decoded.ok) {
+    //     return new Response("Unauthorized", {
+    //       status: 401,
+    //       headers: {
+    //         ...(decoded.error === "expired" ? { "Set-Cookie": buildClearCookie() } : {}),
+    //         ...corsHeaders,
+    //       },
+    //     });
+    //   }
+
+    //   const body = await request.json();
+    //   await inventoryFullSync(env, body);
+
+    //   return new Response(JSON.stringify({ ok: true }), {
+    //     headers: { "Content-Type": "application/json", ...corsHeaders },
+    //   });
+    // }
 
     /* ==============================
        API: GET /api/bootstrap
@@ -358,44 +984,44 @@ export default {
       );
     }
 
-    /* ==============================
-       API: GET /api/inventory/meta
-       ============================== */
-    if (url.pathname === "/api/inventory/meta") {
-      const token = getTokenFromRequest(request);
-      if (!token) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    // /* ==============================
+    //    API: GET /api/inventory/meta
+    //    ============================== */
+    // if (url.pathname === "/api/inventory/meta") {
+    //   const token = getTokenFromRequest(request);
+    //   if (!token) return new Response("Unauthorized", { status: 401, headers: corsHeaders });
 
-      const decoded = decodeAndValidateToken(token);
-      if (!decoded.ok) {
-        return new Response("Unauthorized", {
-          status: 401,
-          headers: {
-            ...(decoded.error === "expired" ? { "Set-Cookie": buildClearCookie() } : {}),
-            ...corsHeaders,
-          },
-        });
-      }
+    //   const decoded = decodeAndValidateToken(token);
+    //   if (!decoded.ok) {
+    //     return new Response("Unauthorized", {
+    //       status: 401,
+    //       headers: {
+    //         ...(decoded.error === "expired" ? { "Set-Cookie": buildClearCookie() } : {}),
+    //         ...corsHeaders,
+    //       },
+    //     });
+    //   }
 
-      let profile;
-      try {
-        profile = await getProfileByEmail(env, decoded.email);
-      } catch (e) {
-        return new Response(e.message, { status: 500, headers: corsHeaders });
-      }
+    //   let profile;
+    //   try {
+    //     profile = await getProfileByEmail(env, decoded.email);
+    //   } catch (e) {
+    //     return new Response(e.message, { status: 500, headers: corsHeaders });
+    //   }
 
-      if (!profile) {
-        return new Response("User not found", { status: 403, headers: corsHeaders });
-      }
+    //   if (!profile) {
+    //     return new Response("User not found", { status: 403, headers: corsHeaders });
+    //   }
 
-      try {
-        const meta = await getInventoryMetaByUserId(env, profile.user_id);
-        return new Response(JSON.stringify({ profile, meta }), {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
-      } catch (e) {
-        return new Response(e.message, { status: 500, headers: corsHeaders });
-      }
-    }
+    //   try {
+    //     const meta = await getInventoryMetaByUserId(env, profile.user_id);
+    //     return new Response(JSON.stringify({ profile, meta }), {
+    //       headers: { "Content-Type": "application/json", ...corsHeaders },
+    //     });
+    //   } catch (e) {
+    //     return new Response(e.message, { status: 500, headers: corsHeaders });
+    //   }
+    // }
 
     /* ==============================
        ✅ SSO LOGIN (UPDATED: SET COOKIE + REDIRECT)
@@ -431,9 +1057,25 @@ export default {
           return new Response(e.message, { status: 500 });
         }
 
-        // redirect to app without token in URL (best practice)
-        // ✅ cookie already set so app can call /api/bootstrap with credentials
         const finalUrl = `${config.baseUrl}/login`;
+
+        return new Response(null, {
+          status: 302,
+          headers: {
+            "Set-Cookie": buildSetCookie({ value: token, maxAge }),
+            Location: finalUrl,
+            "Cache-Control": "no-store",
+          },
+        });
+      } else if (config.type === "odoo") {
+        try {
+          const profile = await getProfileByEmail(env, decoded.email);
+          console.log("[SSO] profile:", profile);
+        } catch (e) {
+          return new Response(e.message, { status: 500 });
+        }
+
+        const finalUrl = `${config.baseUrl}`;
 
         return new Response(null, {
           status: 302,
@@ -465,31 +1107,31 @@ export default {
       });
     }
 
-    /* ==============================
-      Whiteboard API (notes/drawings/shares)
-    =================================*/
-    const whiteboardResponse = await handleWhiteboardApi({
-      request,
-      env,
-      corsHeaders,
-      getTokenFromRequest,
-      decodeAndValidateToken,
-      getProfileByEmail,
-    });
-    if (whiteboardResponse) return whiteboardResponse;
+    // /* ==============================
+    //   Whiteboard API (notes/drawings/shares)
+    // =================================*/
+    // const whiteboardResponse = await handleWhiteboardApi({
+    //   request,
+    //   env,
+    //   corsHeaders,
+    //   getTokenFromRequest,
+    //   decodeAndValidateToken,
+    //   getProfileByEmail,
+    // });
+    // if (whiteboardResponse) return whiteboardResponse;
 
-    /* ==============================
-      Tasks API
-    =================================*/
-    const tasksResponse = await handleTasksApi({
-      request,
-      env,
-      corsHeaders,
-      getTokenFromRequest,
-      decodeAndValidateToken,
-      getProfileByEmail,
-    });
-    if (tasksResponse) return tasksResponse;
+    // /* ==============================
+    //   Tasks API
+    // =================================*/
+    // const tasksResponse = await handleTasksApi({
+    //   request,
+    //   env,
+    //   corsHeaders,
+    //   getTokenFromRequest,
+    //   decodeAndValidateToken,
+    //   getProfileByEmail,
+    // });
+    // if (tasksResponse) return tasksResponse;
 
     /* ==============================
       Hiring API
