@@ -22,6 +22,7 @@ import OrganizationProfile from './pages/Employer/OrganizationProfile';
 import OrganizationTeam from './pages/Employer/OrganizationTeam';
 import JoinOrganization from './pages/Employer/JoinOrganization';
 import EmployerProfile from './pages/Employer/EmployerProfile';
+import { RequireActiveOrganization } from './components/RequireActiveOrganization';
 
 function App() {
   return (
@@ -51,7 +52,9 @@ function App() {
           path="/employer/dashboard"
           element={
             <ProtectedRoute requiredRole="employer">
-              <EmployerDashboard />
+              <RequireActiveOrganization>
+                <EmployerDashboard />
+              </RequireActiveOrganization>
             </ProtectedRoute>
           }
         />
@@ -59,7 +62,9 @@ function App() {
           path="/employer/post-job"
           element={
             <ProtectedRoute requiredRole="employer">
-              <PostJob />
+              <RequireActiveOrganization>
+                <PostJob />
+              </RequireActiveOrganization>
             </ProtectedRoute>
           }
         />
@@ -67,7 +72,9 @@ function App() {
           path="/employer/jobs/:slug/edit"
           element={
             <ProtectedRoute requiredRole="employer">
-              <PostJob />
+              <RequireActiveOrganization>
+                <PostJob />
+              </RequireActiveOrganization>
             </ProtectedRoute>
           }
         />
@@ -75,7 +82,9 @@ function App() {
           path="/employer/applicants"
           element={
             <ProtectedRoute requiredRole="employer">
-              <ApplicantsPipeline />
+              <RequireActiveOrganization>
+                <ApplicantsPipeline />
+              </RequireActiveOrganization>
             </ProtectedRoute>
           }
         />
@@ -83,7 +92,9 @@ function App() {
           path="/employer/applicants/:slug"
           element={
             <ProtectedRoute requiredRole="employer">
-              <ApplicantsPipeline />
+              <RequireActiveOrganization>
+                <ApplicantsPipeline />
+              </RequireActiveOrganization>
             </ProtectedRoute>
           }
         />
@@ -93,7 +104,9 @@ function App() {
           path="/employer/organization"
           element={
             <ProtectedRoute requiredRole="employer">
-              <OrganizationProfile />
+              <RequireActiveOrganization>
+                <OrganizationProfile />
+              </RequireActiveOrganization>
             </ProtectedRoute>
           }
         />
@@ -101,7 +114,9 @@ function App() {
           path="/employer/profile"
           element={
             <ProtectedRoute requiredRole="employer">
-              <EmployerProfile />
+              <RequireActiveOrganization>
+                <EmployerProfile />
+              </RequireActiveOrganization>
             </ProtectedRoute>
           }
         />
@@ -109,7 +124,9 @@ function App() {
           path="/employer/team"
           element={
             <ProtectedRoute requiredRole="employer">
-              <OrganizationTeam />
+              <RequireActiveOrganization>
+                <OrganizationTeam />
+              </RequireActiveOrganization>
             </ProtectedRoute>
           }
         />

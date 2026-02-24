@@ -221,8 +221,8 @@ export default function ChatWindow() {
                                                         className={cn(
                                                             "mt-2 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition",
                                                             isMe
-                                                                ? "border-white/20 bg-white/10 hover:bg-white/20"
-                                                                : "border-gray-200 bg-gray-50 hover:bg-gray-100"
+                                                                ? "border-white/40 bg-white text-gray-700 hover:bg-gray-50"
+                                                                : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100"
                                                         )}
                                                     >
                                                         <FileText className="h-5 w-5" />

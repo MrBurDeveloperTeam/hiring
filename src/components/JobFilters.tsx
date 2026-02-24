@@ -5,6 +5,7 @@ import { Checkbox } from './ui/checkbox';
 import { Button } from './ui/button';
 import { TagPill } from './TagPill';
 import { useState } from 'react';
+import { countries } from '../lib/constants';
 
 export interface JobFilterState {
   keyword: string;
@@ -17,6 +18,7 @@ export interface JobFilterState {
   internship: boolean;
   experienceLevel: string;
   salaryMin: number;
+  country: string;
 }
 
 interface JobFiltersProps {
@@ -37,6 +39,8 @@ const specialtyOptions = [
   'Pediatric',
   'Surgery'
 ];
+
+
 
 export function JobFilters({ values, onChange, onReset, sortBy, onSortChange, compact }: JobFiltersProps) {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -85,6 +89,16 @@ export function JobFilters({ values, onChange, onReset, sortBy, onSortChange, co
             onChange={(e) => handleChange('location', e.target.value)}
             className="min-w-[220px]"
           />
+          <Select
+            label="Country"
+            value={values.country}
+            onChange={(e) => handleChange('country', e.target.value)}
+          >
+            <option value="">All countries</option>
+            {countries.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </Select>
           <Select
             label="Specialty"
             value={values.specialty}
@@ -175,21 +189,25 @@ export function JobFilters({ values, onChange, onReset, sortBy, onSortChange, co
               </Select>
             </div>
           )}
-          {onSortChange && (
-            <div className="flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm text-gray-700 shadow-sm">
-              <Button
-                variant="primary"
-                onClick={() => onChange(values)}
-                icon={<Sparkles className="h-4 w-4 text-amber-500" />}
-                className="min-w-[140px] whitespace-nowrap"
-              >
-                Apply filters
-              </Button>
-              <Button variant="ghost" onClick={onReset} className="text-gray-600" icon={<X className="h-4 w-4" />}>
-                Clear
-              </Button>
-            </div>
-          )}
+        </div>
+
+        <div className="mt-6 flex items-center justify-end gap-3 border-t border-gray-100 pt-6">
+          <Button
+            variant="ghost"
+            onClick={onReset}
+            className="text-gray-500 hover:text-gray-700"
+            icon={<X className="h-4 w-4" />}
+          >
+            Clear filters
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => onChange(values)}
+            icon={<Sparkles className="h-4 w-4 text-amber-500" />}
+            className="min-w-[160px] shadow-sm shadow-brand/10"
+          >
+            Apply filters
+          </Button>
         </div>
       </div>
 

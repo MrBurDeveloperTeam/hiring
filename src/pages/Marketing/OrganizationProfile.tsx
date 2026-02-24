@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { AppShell } from '../../layouts/AppShell';
-import { Building2, MapPin, Globe, CheckCircle2, Edit } from 'lucide-react';
+import { Building2, MapPin, Globe, CheckCircle2, Edit, Instagram, Linkedin, Facebook, Twitter } from 'lucide-react';
 import { getOrganizationByName } from '../../lib/api/public_organizations';
 import { getJobs, deleteJob } from '../../lib/api/jobs';
 import { getApplications } from '../../lib/api/applications';
@@ -27,6 +27,28 @@ export default function OrganizationProfile() {
         title: '',
         variant: 'success'
     });
+
+    // Helper for social icon styles
+    const getSocialColorClass = (platform: string) => {
+        switch (platform.toLowerCase()) {
+            case 'instagram': return 'hover:text-pink-600';
+            case 'linkedin': return 'hover:text-blue-700';
+            case 'facebook': return 'hover:text-blue-600';
+            case 'twitter': return 'hover:text-sky-500';
+            default: return 'hover:text-brand';
+        }
+    };
+
+    // Helper for social icons
+    const getSocialIcon = (platform: string) => {
+        switch (platform.toLowerCase()) {
+            case 'instagram': return <Instagram className="h-5 w-5" />;
+            case 'linkedin': return <Linkedin className="h-5 w-5" />;
+            case 'facebook': return <Facebook className="h-5 w-5" />;
+            case 'twitter': return <Twitter className="h-5 w-5" />;
+            default: return <Globe className="h-5 w-5" />;
+        }
+    };
 
     const handleVerification = async (status: 'verified' | 'rejected' | 'pending') => {
         if (!organization) return;
@@ -74,7 +96,7 @@ export default function OrganizationProfile() {
         async function loadData() {
             if (!orgName) return;
             try {
-                setLoading(true);
+                if (!organization) setLoading(true);
                 // Decode URI component just in case, though react-router might handle it
                 const decodedName = decodeURIComponent(orgName);
                 const orgData = await getOrganizationByName(decodedName);
@@ -182,6 +204,22 @@ export default function OrganizationProfile() {
                                         </div>
                                     )}
                                 </div>
+                                {organization.social_links && organization.social_links.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mt-3">
+                                        {organization.social_links.map((link: any, index: number) => (
+                                            <a
+                                                key={index}
+                                                href={link.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className={`h-8 w-8 flex items-center justify-center rounded-full text-gray-400 transition-colors ${getSocialColorClass(link.platform)}`}
+                                                title={link.platform}
+                                            >
+                                                {getSocialIcon(link.platform)}
+                                            </a>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div className="flex gap-2 flex-col items-end">
                                 {userRole === 'employer' && (
@@ -317,7 +355,9 @@ export default function OrganizationProfile() {
                             </div>
                             <div className="flex justify-between py-2">
                                 <span className="text-gray-500">Member since</span>
-                                <span className="font-medium text-gray-900">{new Date(organization.created_at).getFullYear()}</span>
+                                <span className="font-medium text-gray-900">
+                                    {organization.created_at ? new Date(organization.created_at).getFullYear() : new Date().getFullYear()}
+                                </span>
                             </div>
                         </div>
                     </div>

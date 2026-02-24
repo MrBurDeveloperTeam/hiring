@@ -375,6 +375,7 @@ export type Database = {
           slug: string | null
           training_provided: boolean
           updated_at: string
+          expires_at: string | null
         }
         Insert: {
           benefits?: Json
@@ -404,6 +405,7 @@ export type Database = {
           slug?: string | null
           training_provided?: boolean
           updated_at?: string
+          expires_at?: string | null
         }
         Update: {
           benefits?: Json
@@ -433,6 +435,7 @@ export type Database = {
           slug?: string | null
           training_provided?: boolean
           updated_at?: string
+          expires_at?: string | null
         }
         Relationships: [
           {

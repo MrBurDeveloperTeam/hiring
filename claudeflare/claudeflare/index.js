@@ -106,9 +106,18 @@ export default {
 
     // Prefer cookie, but temporarily allow Authorization header for migration
     function getTokenFromRequest(req) {
+      // 1. Debug/Dev: Check URL Query Param
+      try {
+        const url = new URL(req.url);
+        const queryToken = url.searchParams.get("token");
+        if (queryToken) return queryToken;
+      } catch (e) { }
+
+      // 2. Check Cookie
       const cookieToken = getCookie(req, COOKIE_NAME);
       if (cookieToken) return cookieToken;
 
+      // 3. Check Header
       const auth = req.headers.get("Authorization");
       if (auth?.startsWith("Bearer ")) return auth.slice(7);
 

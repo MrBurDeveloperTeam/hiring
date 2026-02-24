@@ -5,7 +5,7 @@ import { Badge } from '../../components/ui/badge';
 import { TagPill } from '../../components/TagPill';
 import { Button } from '../../components/ui/button';
 import { ApplyModal } from '../../components/ApplyModal';
-import { Building2, MapPin, Share2, ShieldCheck, Sparkles, Star, Wallet, Check, Trash2 } from 'lucide-react';
+import { Building2, MapPin, Share2, ShieldCheck, Sparkles, Star, Wallet, Check, Trash2, ArrowLeft } from 'lucide-react';
 import { Job } from '../../lib/types';
 import { timeAgo } from '../../lib/utils';
 import { Breadcrumbs } from '../../components/Breadcrumbs';
@@ -19,6 +19,7 @@ import { Toast } from '../../components/ui/toast';
 
 import { ShareModal } from '../../components/ShareModal';
 import { getUsersOrganizations } from '../../lib/api/organizations';
+import { Modal } from '../../components/ui/modal';
 
 export default function JobDetails() {
   const { slug } = useParams<{ slug: string }>();
@@ -31,6 +32,7 @@ export default function JobDetails() {
   const [loading, setLoading] = useState(true);
   const [showApply, setShowApply] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
   const [toastOpen, setToastOpen] = useState(false);
@@ -165,20 +167,28 @@ export default function JobDetails() {
     }
   };
 
-  const handleDeleteJob = async () => {
+  const handleDeleteJob = () => {
+    if (!job) return;
+    setDeleteConfirmationOpen(true);
+  };
+
+  const confirmDelete = async () => {
     if (!job) return;
 
-    if (window.confirm('Are you sure you want to delete this job posting? This action cannot be undone.')) {
-      try {
-        await deleteJob(job.id);
-        setToastMessage('Job deleted successfully');
-        setToastOpen(true);
+    try {
+      await deleteJob(job.id);
+      setDeleteConfirmationOpen(false);
+      setToastMessage('Job deleted successfully');
+      setToastOpen(true);
+      // Wait a moment for toast to be visible before navigating
+      setTimeout(() => {
         navigate('/employer/dashboard');
-      } catch (error) {
-        console.error('Error deleting job:', error);
-        setToastMessage('Failed to delete job');
-        setToastOpen(true);
-      }
+      }, 1500);
+    } catch (error) {
+      console.error('Error deleting job:', error);
+      setDeleteConfirmationOpen(false);
+      setToastMessage('Failed to delete job');
+      setToastOpen(true);
     }
   };
 
@@ -198,8 +208,8 @@ export default function JobDetails() {
         <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-6 text-center">
           <p className="text-lg font-semibold text-gray-900">Job not found</p>
           <p className="text-sm text-gray-600">This posting is unavailable. Browse other roles instead.</p>
-          <Button variant="primary" className="mt-4" onClick={() => navigate('/jobs')}>
-            Back to jobs
+          <Button variant="primary" className="mt-4 gap-2" onClick={() => navigate('/jobs')}>
+            <ArrowLeft className="h-4 w-4" /> Back to jobs
           </Button>
         </div>
       </AppShell>
@@ -212,9 +222,9 @@ export default function JobDetails() {
     <AppShell padded background="muted">
       <div className="mb-3 flex items-center justify-between">
         {/* <Breadcrumbs items={[{ label: 'Home', to: '/seekers' }, { label: 'Jobs', to: '/jobs' }, { label: job.roleType }]} /> */}
-        <Link to="/jobs" className="text-xs font-semibold text-brand hover:text-brand-hover">
-          Back to jobs
-        </Link>
+        <button onClick={() => navigate(-1)} className="inline-flex items-center justify-center rounded-full p-2 text-brand transition-colors hover:bg-brand/10" title="Go back">
+          <ArrowLeft className="h-5 w-5" />
+        </button>
       </div>
       <div className="grid gap-6 lg:grid-cols-[1fr,300px]">
         <div className="space-y-4">
@@ -407,6 +417,31 @@ export default function JobDetails() {
         url={window.location.href}
         title={`${job.roleType} at ${job.clinicName}`}
       />
+
+      <Modal
+        open={deleteConfirmationOpen}
+        onClose={() => setDeleteConfirmationOpen(false)}
+        title="Delete Job Posting"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Are you sure you want to delete this job posting? This action cannot be undone and candidates will no longer be able to apply.
+          </p>
+          <div className="flex justify-end gap-3">
+            <Button variant="ghost" onClick={() => setDeleteConfirmationOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              className="bg-red-600 hover:bg-red-700 text-white border-transparent"
+              onClick={confirmDelete}
+            >
+              Delete Job
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Toast
         open={toastOpen}

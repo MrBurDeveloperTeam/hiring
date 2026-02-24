@@ -10,7 +10,16 @@ const WORKER_URL = env.workerUrl.replace(/\/$/, '');
 
 async function getAccessToken(): Promise<string | null> {
     const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token ?? null;
+    if (session?.access_token) return session.access_token;
+
+    // Fallback to dev token if available
+    const devToken = import.meta.env.VITE_DEV_AUTH_TOKEN;
+    if (devToken && (import.meta.env.DEV || import.meta.env.VITE_WORKER_URL?.includes('localhost'))) {
+        console.warn('Using VITE_DEV_AUTH_TOKEN for authentication');
+        return devToken;
+    }
+
+    return null;
 }
 
 export interface WorkerResponse<T = any> {
@@ -88,6 +97,16 @@ export function workerPut<T = any>(path: string, body?: any): Promise<WorkerResp
  */
 export function workerDelete<T = any>(path: string): Promise<WorkerResponse<T>> {
     return workerFetch<T>(path, { method: 'DELETE' });
+}
+
+/**
+ * Shorthand for PATCH requests
+ */
+export function workerPatch<T = any>(path: string, body?: any): Promise<WorkerResponse<T>> {
+    return workerFetch<T>(path, {
+        method: 'PATCH',
+        body: body ? JSON.stringify(body) : undefined,
+    });
 }
 
 /**

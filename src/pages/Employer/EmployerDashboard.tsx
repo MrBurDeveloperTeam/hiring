@@ -8,9 +8,8 @@ import { JobCard } from '../../components/JobCard';
 import { Breadcrumbs } from '../../components/Breadcrumbs';
 import { JobStage } from '../../lib/types';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabase } from '../../lib/supabase';
 import { getUsersOrganizations } from '../../lib/api/organizations';
-import { getJobs } from '../../lib/api/jobs';
+import { getJobs, deleteJob } from '../../lib/api/jobs';
 import { ChevronsUpDown, Building2, Users } from 'lucide-react';
 import {
   DropdownMenu,
@@ -18,6 +17,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
+import { Modal } from '../../components/ui/modal';
+import { Toast } from '../../components/ui/toast';
 
 const sidebarLinks = [
   { to: '/employer/dashboard', label: 'Overview' },
@@ -38,6 +39,12 @@ export default function EmployerDashboard() {
   const [applications, setApplications] = useState<any[]>([]);
   const [org, setOrg] = useState<any>(null);
   const [allOrgs, setAllOrgs] = useState<any[]>([]);
+
+  // Deletion State
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<any>(null);
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -72,30 +79,18 @@ export default function EmployerDashboard() {
           });
           setActiveJobs(jobsData || []);
 
-          // 3. Get Applications
-          const { data: appsData, error: appsError } = await supabase
-            .from('applications')
-            .select(`
-              id, status, created_at,
-              seeker:profiles!seeker_user_id(name, seeker_profiles(school_name)),
-              job:jobs(title)
-            `)
-            .eq('org_id', activeOrg.id)
-            .order('created_at', { ascending: false });
-
-          if (appsError) console.error('Error fetching apps:', appsError);
-          else {
-            // Transform for easier consumption
-            const formattedApps = (appsData || []).map((app: any) => ({
-              id: app.id,
-              status: app.status,
-              name: app.seeker?.name || 'Unknown',
-              school: app.seeker?.seeker_profiles?.school_name || 'Unknown School',
-              jobTitle: app.job?.title || 'Unknown Job',
-              created_at: app.created_at
-            }));
-            setApplications(formattedApps);
-          }
+          // 3. Get Applications via Worker
+          const { getCandidatesForOrg } = await import('../../lib/api/applications');
+          const candidates = await getCandidatesForOrg(activeOrg.id);
+          const formattedApps = (candidates || []).map((c: any) => ({
+            id: c.id,
+            status: c.status ? (c.status.charAt(0).toUpperCase() + c.status.slice(1).toLowerCase()) : 'Applied',
+            name: c.name || 'Unknown',
+            school: c.school || 'Unknown School',
+            jobTitle: c.jobTitle || 'Unknown Job',
+            created_at: c.appliedAt
+          }));
+          setApplications(formattedApps);
         }
       } catch (err) {
         console.error('Error loading dashboard:', err);
@@ -110,6 +105,30 @@ export default function EmployerDashboard() {
   const handleOrgSwitch = (orgId: string) => {
     localStorage.setItem('activeOrgId', orgId);
     window.location.reload();
+  };
+
+  const handleDeleteJob = (job: any) => {
+    setJobToDelete(job);
+    setDeleteConfirmationOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!jobToDelete) return;
+
+    try {
+      await deleteJob(jobToDelete.id);
+      // Refresh list locally to avoid full reload
+      setActiveJobs(prev => prev.filter(j => j.id !== jobToDelete.id));
+      setToastMessage('Job deleted successfully');
+      setToastOpen(true);
+    } catch (error) {
+      console.error('Error deleting job:', error);
+      setToastMessage('Failed to delete job');
+      setToastOpen(true);
+    } finally {
+      setDeleteConfirmationOpen(false);
+      setJobToDelete(null);
+    }
   };
 
   if (loading) {
@@ -139,7 +158,7 @@ export default function EmployerDashboard() {
                 variant="primary"
                 size="lg"
                 className="w-full"
-                onClick={() => window.location.href = '/employer/profile'}
+                onClick={() => window.location.href = '/employer/organization'}
               >
                 Create New Organization
               </Button>
@@ -250,7 +269,11 @@ export default function EmployerDashboard() {
                     key={job.id}
                     className="rounded-xl border border-gray-100 bg-gray-50 p-4"
                   >
-                    <JobCard job={job} canEdit={true} />
+                    <JobCard
+                      job={job}
+                      canEdit={true}
+                      onDelete={handleDeleteJob}
+                    />
                     <div className="mt-4 flex items-center gap-2">
                       <Button variant="outline" size="sm" asChild>
                         <Link to={`/jobs/${job.id}`}>Preview</Link>
@@ -314,6 +337,38 @@ export default function EmployerDashboard() {
           </div>
         </div>
       </div>
+      <Toast
+        open={toastOpen}
+        onClose={() => setToastOpen(false)}
+        title={toastMessage.includes('successfully') ? 'Success' : 'Error'}
+        description={toastMessage}
+        variant={toastMessage.includes('successfully') ? 'success' : 'error'}
+      />
+
+      <Modal
+        open={deleteConfirmationOpen}
+        onClose={() => setDeleteConfirmationOpen(false)}
+        title="Delete Job Posting"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Are you sure you want to delete this job posting? This action cannot be undone and candidates will no longer be able to apply.
+          </p>
+          <div className="flex justify-end gap-3">
+            <Button variant="ghost" onClick={() => setDeleteConfirmationOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              className="bg-red-600 hover:bg-red-700 text-white border-transparent"
+              onClick={confirmDelete}
+            >
+              Delete Job
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </DashboardShell>
   );
 }

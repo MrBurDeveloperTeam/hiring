@@ -12,7 +12,7 @@ export default function ConversationList() {
 
     const filteredConversations = conversations.filter((c) => {
         const name = userRole === 'seeker' ? c.organization?.org_name : c.seeker?.name;
-        return name?.toLowerCase().includes(searchTerm.toLowerCase());
+        return (name || '').toLowerCase().includes(searchTerm.toLowerCase());
     });
 
     if (loading && conversations.length === 0) {

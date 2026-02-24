@@ -60,6 +60,8 @@ function mapJobToFrontend(job: JobRow, org: OrganizationRow | null): Job {
     orgId: job.org_id,
     logoUrl: org?.logo_url || undefined,
     slug: job.slug || undefined,
+    screening_questions: (job as any).screening_questions || [],
+    expiresAt: job.expires_at || undefined,
   };
 }
 
@@ -75,6 +77,7 @@ export async function getJobs(filters?: {
   training?: boolean;
   internship?: boolean;
   orgId?: string;
+  country?: string;
   page?: number;
   limit?: number;
 }): Promise<{ data: Job[]; count: number }> {
@@ -91,6 +94,7 @@ export async function getJobs(filters?: {
   if (filters?.training) params.set('training', 'true');
   if (filters?.internship) params.set('internship', 'true');
   if (filters?.orgId) params.set('orgId', filters.orgId);
+  if (filters?.country) params.set('country', filters.country);
   if (filters?.page) params.set('page', String(filters.page));
   if (filters?.limit) params.set('limit', String(filters.limit));
 

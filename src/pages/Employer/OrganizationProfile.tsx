@@ -23,6 +23,20 @@ const sidebarLinks = [
     { to: '/jobs', label: 'Job board' }
 ];
 
+interface SocialLink {
+    platform: string;
+    url: string;
+}
+
+const SOCIAL_PLATFORMS = [
+    { value: 'instagram', label: 'Instagram' },
+    { value: 'linkedin', label: 'LinkedIn' },
+    { value: 'facebook', label: 'Facebook' },
+    { value: 'twitter', label: 'Twitter' },
+    { value: 'website', label: 'Website' },
+    { value: 'other', label: 'Other' }
+];
+
 import { Badge } from '../../components/ui/badge';
 
 type OrgType = Database['public']['Enums']['org_type'];
@@ -44,6 +58,11 @@ export default function OrganizationProfile() {
     const [verifiedStatus, setVerifiedStatus] = useState<VerifiedStatus>('unverified');
     const [description, setDescription] = useState('');
     const [websiteUrl, setWebsiteUrl] = useState('');
+    const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
+
+    // New social link input state
+    const [newPlatform, setNewPlatform] = useState('instagram');
+    const [newUrl, setNewUrl] = useState('');
 
     // Address State
     const [address1, setAddress1] = useState('');
@@ -73,6 +92,7 @@ export default function OrganizationProfile() {
                     setDescription(org.description || '');
                     setWebsiteUrl(org.website_url || '');
                     setWebsiteUrl(org.website_url || '');
+                    setSocialLinks(org.social_links || []);
 
                     // Split address column into address1 and address2
                     const rawAddress = org.address || '';
@@ -135,6 +155,41 @@ export default function OrganizationProfile() {
         }
     };
 
+    const availablePlatforms = SOCIAL_PLATFORMS.filter(
+        p => !socialLinks.some(link => link.platform === p.value) || p.value === 'other'
+    );
+
+    // Ensure newPlatform is always a valid available option
+    useEffect(() => {
+        if (!availablePlatforms.some(p => p.value === newPlatform)) {
+            if (availablePlatforms.length > 0) {
+                setNewPlatform(availablePlatforms[0].value);
+            } else {
+                setNewPlatform(''); // No options left
+            }
+        }
+    }, [socialLinks, availablePlatforms, newPlatform]);
+
+    const handleAddSocialLink = () => {
+        if (!newUrl || !newPlatform) return;
+
+        // Simple URL validation
+        let formattedUrl = newUrl;
+        if (!formattedUrl.startsWith('http')) {
+            formattedUrl = `https://${formattedUrl}`;
+        }
+
+        const updatedLinks = [...socialLinks, { platform: newPlatform, url: formattedUrl }];
+        setSocialLinks(updatedLinks);
+        setNewUrl(''); // Reset input
+    };
+
+    const handleRemoveSocialLink = (index: number) => {
+        const newLinks = [...socialLinks];
+        newLinks.splice(index, 1);
+        setSocialLinks(newLinks);
+    };
+
     const handleSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         if (!user) return;
@@ -173,7 +228,8 @@ export default function OrganizationProfile() {
                 state,
                 postcode,
                 country,
-                logo_url: logoUrl
+                logo_url: logoUrl,
+                social_links: socialLinks
             };
 
             if (orgId) {
@@ -431,6 +487,69 @@ export default function OrganizationProfile() {
                                             <option value="Singapore">Singapore</option>
                                         </Select>
                                     </div>
+                                </div>
+
+                                <div className="md:col-span-2 pt-2 border-t border-gray-100 mt-2">
+                                    <h3 className="text-sm font-semibold text-gray-800 mb-4">Social Media</h3>
+
+                                    <div className="space-y-3 mb-4">
+                                        {socialLinks.map((link, index) => (
+                                            <div key={index} className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                                                <Badge variant="outline" className="capitalize w-24 justify-center">
+                                                    {link.platform}
+                                                </Badge>
+                                                <span className="flex-1 text-sm truncate text-gray-600">{link.url}</span>
+                                                {canEdit && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleRemoveSocialLink(index)}
+                                                        className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                    >
+                                                        &times;
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ))}
+
+                                        {socialLinks.length === 0 && (
+                                            <p className="text-sm text-gray-500 italic">No social media links added yet.</p>
+                                        )}
+                                    </div>
+
+                                    {canEdit && (
+                                        <div className="flex flex-col md:flex-row gap-3 items-end bg-blue-50/50 p-3 rounded-xl border border-blue-100">
+                                            <div className="w-full md:w-1/3">
+                                                <label className="text-xs font-medium text-gray-700 mb-1 block">Platform</label>
+                                                <Select
+                                                    value={newPlatform}
+                                                    onChange={(e) => setNewPlatform(e.target.value)}
+                                                >
+                                                    {availablePlatforms.map(p => (
+                                                        <option key={p.value} value={p.value}>{p.label}</option>
+                                                    ))}
+                                                </Select>
+                                            </div>
+                                            <div className="w-full md:flex-1">
+                                                <label className="text-xs font-medium text-gray-700 mb-1 block">URL</label>
+                                                <Input
+                                                    value={newUrl}
+                                                    onChange={(e) => setNewUrl(e.target.value)}
+                                                    placeholder="e.g. instagram.com/myclinic"
+                                                    className="bg-white"
+                                                />
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                onClick={handleAddSocialLink}
+                                                disabled={!newUrl}
+                                            >
+                                                Add
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="md:col-span-2 flex justify-end items-center gap-2 mt-6 pt-4 border-t border-gray-100">

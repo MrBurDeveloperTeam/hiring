@@ -85,8 +85,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .single();
 
         if (profile) {
-          const fallbackRole: UserRole = profile.account_type === 'company' ? 'employer' : 'seeker';
-          console.warn(`No user_role found, falling back to account_type: ${profile.account_type} -> ${fallbackRole}`);
+          let fallbackRole: UserRole = 'seeker';
+          if (profile.account_type === 'company') fallbackRole = 'employer';
+          if (profile.account_type === 'admin') fallbackRole = 'admin';
+
+          // Info only: this user hasn't been migrated to the new user_roles table yet
+          console.info(`Profile fallback: account_type '${profile.account_type}' -> role '${fallbackRole}'`);
           setUserRole(fallbackRole);
         } else {
           console.error('Error fetching user role:', error || profileError);
@@ -135,7 +139,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .maybeSingle();
 
         if (profile) {
-          role = profile.account_type === 'company' ? 'employer' : 'seeker';
+          if (profile.account_type === 'company') role = 'employer';
+          else if (profile.account_type === 'admin') role = 'admin';
+          else role = 'seeker';
         }
       }
     }

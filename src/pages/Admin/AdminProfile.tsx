@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/input';
 import { Toast } from '../../components/ui/toast';
 import { Modal } from '../../components/ui/modal';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { workerGet, workerPut } from '../../lib/api/apiClient';
 import { Breadcrumbs } from '../../components/Breadcrumbs';
 import { User2 } from 'lucide-react';
 
@@ -36,22 +36,15 @@ export default function AdminProfile() {
 
         async function loadProfile() {
             try {
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('user_id', user!.id)
-                    .single();
-
-                if (error && error.code !== 'PGRST116') {
-                    console.error("Error loading profile:", error);
-                }
+                const result = await workerGet('/api/profiles/me') as any;
+                const data = result.profile || result.data;
 
                 if (data) {
                     setName(data.name || '');
                     setPhone(data.phone || '');
                 }
             } catch (err) {
-                console.error(err);
+                console.error("Error loading profile:", err);
             } finally {
                 setLoading(false);
             }
@@ -65,16 +58,11 @@ export default function AdminProfile() {
         setSaving(true);
 
         try {
-            const updates = {
-                user_id: user.id,
+            await workerPut('/api/profiles/me', {
                 name: name,
                 phone: phone,
-                email: user.email!,
                 updated_at: new Date().toISOString(),
-            };
-
-            const { error } = await supabase.from('profiles').upsert(updates as any);
-            if (error) throw error;
+            });
 
             setToastMessage("Profile updated successfully");
             setToastVariant('success');

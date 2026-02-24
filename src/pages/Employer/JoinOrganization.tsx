@@ -142,13 +142,22 @@ export default function JoinOrganization() {
     return (
         <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
             <Card className="w-full max-w-md shadow-lg">
-                <CardHeader className="text-center">
+                <CardHeader className="text-center flex flex-col items-center">
                     <CardTitle className="text-2xl font-bold">Join Organization</CardTitle>
                     <CardDescription>
                         You have been invited to join <span className="font-semibold text-gray-900">{inviteDetails?.org_name || resolvedOrgName}</span>
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                    {inviteDetails?.logo_url && (
+                        <div className="flex justify-center mb-4">
+                            <img
+                                src={inviteDetails.logo_url}
+                                alt={`${inviteDetails.org_name} logo`}
+                                className="max-h-24 w-auto max-w-full object-contain p-4"
+                            />
+                        </div>
+                    )}
                     <div className="flex flex-col items-center p-4 bg-blue-50 rounded-lg text-blue-700">
                         <p className="font-medium text-lg">{inviteDetails?.role === 'owner' ? 'Owner' : 'Team Member'} Role</p>
                         <p className="text-sm opacity-80">Invited by {inviteDetails?.inviter_name || 'Organization Admin'}</p>

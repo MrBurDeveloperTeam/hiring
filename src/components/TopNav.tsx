@@ -29,7 +29,13 @@ export function TopNav() {
     if (path.startsWith('/organizations') && userRole === 'admin') return 'admin';
     if (path.startsWith('/organizations') && userRole === 'employer') return 'employer';
     if (path.startsWith('/jobs') && userRole === 'admin') return 'admin';
-    if (path.startsWith('/jobs') && userRole === 'employer') return 'employer';
+    // Allow employers to browse jobs as seekers (unless editing)
+    if (path.startsWith('/jobs') && userRole === 'employer') {
+      // If they are editing a job, show employer nav
+      if (path.includes('/edit')) return 'employer';
+      // Otherwise (viewing list or details), show seeker nav
+      return 'seeker';
+    }
     // Keep employer nav when viewing seeker public profiles (e.g., applicants)
     if (path.match(/^\/seekers\/[a-f0-9-]+$/) && userRole === 'employer') return 'employer';
     return 'seeker';

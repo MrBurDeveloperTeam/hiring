@@ -28,6 +28,16 @@ export function timeAgo(date: string) {
   return `${months} mo${months > 1 ? 's' : ''} ago`;
 }
 
+export function getRemainingDays(date?: string) {
+  if (!date) return null;
+  const now = new Date();
+  const target = new Date(date);
+  if (isNaN(target.getTime())) return null;
+  const diff = target.getTime() - now.getTime();
+  const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+  return days > 0 ? days : 0;
+}
+
 export function currency(amount: number) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',

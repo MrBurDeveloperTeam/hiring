@@ -22,7 +22,15 @@ function mapMessage(msg: any): Message {
 export async function getConversations(userId: string, role: 'seeker' | 'employer' | 'admin'): Promise<Conversation[]> {
     try {
         const result = await workerGet(`/api/chat/conversations`);
-        return (result.data || []) as Conversation[];
+        return (result.data || []).map((c: any) => ({
+            ...c,
+            // Map 'organizations' (from API alias) to 'organization' (frontend type)
+            organization: Array.isArray(c.organizations) ? c.organizations[0] : c.organizations,
+            // Ensure seeker is also an object if it comes as array
+            seeker: Array.isArray(c.seeker) ? c.seeker[0] : c.seeker,
+            // Map job if needed (though API returns 'job' as object usually)
+            job: Array.isArray(c.job) ? c.job[0] : c.job
+        })) as Conversation[];
     } catch (error) {
         console.error('Error fetching conversations:', error);
         return [];
@@ -100,7 +108,15 @@ export async function getOrCreateConversation(orgId: string, seekerId: string, j
             jobId: jobId || null,
         });
 
-        return result.data as Conversation || null;
+        const data = result.data as any;
+        if (!data) return null;
+
+        return {
+            ...data,
+            organization: Array.isArray(data.organizations) ? data.organizations[0] : data.organizations,
+            seeker: Array.isArray(data.seeker) ? data.seeker[0] : data.seeker,
+            job: Array.isArray(data.job) ? data.job[0] : data.job
+        } as Conversation;
     } catch (error) {
         console.error('Error getting/creating conversation:', error);
         return null;
