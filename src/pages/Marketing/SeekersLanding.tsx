@@ -147,17 +147,24 @@ export default function SeekersLanding() {
     async function fetchHotRoles() {
       try {
         setLoading(true);
-        // 1. Get app counts via Worker
-        const apps = await getApplications({});
+
+        // 1. Get app counts via Worker (only if logged in)
         const counts: Record<string, number> = {};
-        apps?.forEach((a) => {
-          counts[a.jobId] = (counts[a.jobId] || 0) + 1;
-        });
+        if (user) {
+          try {
+            const apps = await getApplications({});
+            apps?.forEach((a) => {
+              counts[a.jobId] = (counts[a.jobId] || 0) + 1;
+            });
+          } catch {
+            // Ignore — unauthenticated or failed, just skip popularity sorting
+          }
+        }
 
         // 2. Get all published jobs
         const { data: allJobs } = await getJobs({ status: 'published', limit: 100 });
 
-        // 3. Sort by popularity (app count)
+        // 3. Sort by popularity (app count) if available, otherwise by recency
         const sorted = allJobs.sort((a, b) => {
           const countA = counts[a.id] || 0;
           const countB = counts[b.id] || 0;
@@ -173,7 +180,7 @@ export default function SeekersLanding() {
       }
     }
     fetchHotRoles();
-  }, []);
+  }, [user]);
   const [selectedJob, setSelectedJob] = useState<Job | undefined>();
   const [showApply, setShowApply] = useState(false);
 

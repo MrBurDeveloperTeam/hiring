@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { Session, User, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { Database } from '../lib/database.types';
+import { workerPostPublic } from '../lib/api/apiClient';
 
 type UserRole = Database['public']['Enums']['user_role'];
 
@@ -150,6 +151,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, fullName: string, role: 'seeker' | 'employer', metadata: any = {}) => {
+    // Step 1: Create user in Odoo via Cloudflare Worker (proxies to SSO)
+    try {
+      const odooPayload: any = {
+        email,
+        password,
+        name: fullName,
+      };
+
+      if (role === 'employer') {
+        odooPayload.company_name = metadata?.employerData?.clinicName || fullName;
+      }
+
+      const odooData = await workerPostPublic('/api/hiring/sign-up', odooPayload);
+
+      if (!odooData?.ok) {
+        return {
+          error: {
+            message: odooData?.error || 'Failed to create account in Odoo',
+            name: 'OdooSignUpError',
+            status: 500,
+          } as unknown as AuthError,
+        };
+      }
+    } catch (err: any) {
+      return {
+        error: {
+          message: err?.message || 'Failed to connect to sign-up service',
+          name: 'OdooSignUpError',
+          status: 500,
+        } as unknown as AuthError,
+      };
+    }
+
+    // Step 2: Create user in Supabase (only if Odoo succeeded)
     const { error } = await supabase.auth.signUp({
       email,
       password,

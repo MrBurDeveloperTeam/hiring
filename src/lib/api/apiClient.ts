@@ -83,6 +83,37 @@ export function workerPost<T = any>(path: string, body?: any): Promise<WorkerRes
 }
 
 /**
+ * Shorthand for POST requests that do NOT require authentication.
+ * Used for public endpoints like sign-up.
+ */
+export async function workerPostPublic<T = any>(path: string, body?: any): Promise<WorkerResponse<T>> {
+    const url = `${WORKER_URL}${path}`;
+
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+    });
+
+    if (!res.ok) {
+        const errorBody = await res.text();
+        let errorMessage: string;
+        try {
+            const parsed = JSON.parse(errorBody);
+            errorMessage = parsed.error || `Worker error ${res.status}`;
+        } catch {
+            errorMessage = errorBody || `Worker error ${res.status}`;
+        }
+        throw new Error(errorMessage);
+    }
+
+    const text = await res.text();
+    return text ? JSON.parse(text) : { ok: true };
+}
+
+/**
  * Shorthand for PUT requests
  */
 export function workerPut<T = any>(path: string, body?: any): Promise<WorkerResponse<T>> {
