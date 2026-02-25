@@ -23,6 +23,7 @@ import OrganizationTeam from './pages/Employer/OrganizationTeam';
 import JoinOrganization from './pages/Employer/JoinOrganization';
 import EmployerProfile from './pages/Employer/EmployerProfile';
 import { RequireActiveOrganization } from './components/RequireActiveOrganization';
+import { api } from './lib/api/api';
 
 function App() {
   return (

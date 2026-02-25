@@ -3,6 +3,7 @@ import { Session, User, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { Database } from '../lib/database.types';
 import { workerPostPublic } from '../lib/api/apiClient';
+import { api } from '../lib/api/api';
 
 type UserRole = Database['public']['Enums']['user_role'];
 
@@ -38,7 +39,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
   const [authModalRedirectPath, setAuthModalRedirectPath] = useState<string | undefined>(undefined);
 
+  const checkSession = async () => {
+    const sso = await api.get('/sso/exchange');
+    await supabase.auth.setSession({
+      access_token: sso.data.access_token,
+      refresh_token: sso.data.refresh_token
+    });
+  };
+
   useEffect(() => {
+    checkSession();
     // 1. Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
