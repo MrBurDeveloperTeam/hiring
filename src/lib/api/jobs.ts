@@ -1,4 +1,4 @@
-import { workerGet, workerPost, workerPut, workerDelete, workerFetch } from './apiClient';
+import { workerGet, workerPost, workerPut, workerDelete, workerFetch, workerGetPublic } from './apiClient';
 import type { Database } from '../database.types';
 import type { Job } from '../types';
 
@@ -101,7 +101,7 @@ export async function getJobs(filters?: {
   const query = params.toString();
   const path = `/api/jobs${query ? `?${query}` : ''}`;
 
-  const result = await workerGet(path);
+  const result = await workerGetPublic(path);
 
   const jobs = (result.data || []).map((item: any) => {
     const org = Array.isArray(item.organizations) ? item.organizations[0] : item.organizations;
@@ -113,7 +113,7 @@ export async function getJobs(filters?: {
 
 export async function getJobById(id: string): Promise<Job | null> {
   try {
-    const result = await workerGet(`/api/jobs/${id}`);
+    const result = await workerGetPublic(`/api/jobs/${id}`);
     if (!result.job) return null;
 
     const job = result.job as any;
@@ -126,7 +126,7 @@ export async function getJobById(id: string): Promise<Job | null> {
 
 export async function getJobBySlug(slug: string): Promise<Job | null> {
   try {
-    const result = await workerGet(`/api/jobs/slug/${encodeURIComponent(slug)}`);
+    const result = await workerGetPublic(`/api/jobs/slug/${encodeURIComponent(slug)}`);
     if (!result.job) return null;
 
     const job = result.job as any;
