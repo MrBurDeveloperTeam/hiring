@@ -213,9 +213,10 @@ export default function EditProfilePage() {
 
             // Navigate back after short delay
             setTimeout(() => navigate('/seekers/dashboard'), 1500);
-        } catch (err) {
-            console.error('Error saving profile:', JSON.stringify(err, null, 2));
-            alert('Failed to save profile.');
+        } catch (err: any) {
+            console.error('Error saving profile:', err);
+            const errorMsg = err?.response?.data?.error || err?.message || 'Unknown error';
+            alert(`Failed to save profile: ${errorMsg}`);
         } finally {
             setSaving(false);
         }
