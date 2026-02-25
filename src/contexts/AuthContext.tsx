@@ -40,27 +40,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authModalRedirectPath, setAuthModalRedirectPath] = useState<string | undefined>(undefined);
 
   const checkSession = async () => {
-    const sso = await api.get('/sso/exchange');
-    await supabase.auth.setSession({
-      access_token: sso.data.access_token,
-      refresh_token: sso.data.refresh_token
-    });
+    try {
+      const sso = await api.get('/sso/exchange');
+      if (sso.data?.access_token) {
+        const { error } = await supabase.auth.setSession({
+          access_token: sso.data.access_token,
+          refresh_token: sso.data.refresh_token
+        });
+        if (error) throw error;
+        return true;
+      }
+    } catch (error: any) {
+      // 401 is expected for unauthenticated users
+      if (error.message?.includes('401') || error.message?.includes('Not authenticated') || error.message?.includes('missing_sso')) {
+        console.info('SSO: No active session found (guest user)');
+      } else {
+        console.warn('SSO Exchange failed (Cloudflare worker unavailable or error). Falling back to Supabase directly.', error);
+      }
+    }
+    return false;
   };
 
   useEffect(() => {
-    checkSession();
-    // 1. Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserRole(session.user.id);
+    const initializeAuth = async () => {
+      // 1. Try to exchange SSO token from Odoo/Cloudflare
+      await checkSession();
+
+      // 2. Check for an active session (from SSO success above or local storage fallback)
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+
+      if (currentSession?.user) {
+        await fetchUserRole(currentSession.user.id);
       } else {
         setLoading(false);
       }
-    });
+    };
 
-    // 2. Listen for changes
+    initializeAuth();
+
+    // 3. Listen for subsequent auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);

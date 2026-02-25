@@ -156,8 +156,8 @@ export default function SeekersLanding() {
             apps?.forEach((a) => {
               counts[a.jobId] = (counts[a.jobId] || 0) + 1;
             });
-          } catch {
-            // Ignore — unauthenticated or failed, just skip popularity sorting
+          } catch (err) {
+            // Unauthenticated or failed — just skip popularity sorting (expected for guest users)
           }
         }
 
