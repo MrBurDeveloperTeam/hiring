@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo, useCallback, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { Conversation, Message } from '../lib/types';
 import {
@@ -39,7 +39,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
     // Load conversations on mount or user change
     useEffect(() => {
-        if (user && userRole) {
+        if (user?.id && userRole) {
             loadConversations();
 
             // Poll for new conversations/messages every 15 seconds to keep unread counts fresh
@@ -57,7 +57,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             setConversations([]);
             setActiveConversation(null);
         }
-    }, [user, userRole]);
+    }, [user?.id, userRole]);
 
     // Load messages when active conversation changes
     useEffect(() => {
@@ -118,33 +118,36 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
     }, [activeConversation?.id]);
 
-    async function loadConversations() {
+    const loadConversations = useCallback(async () => {
         if (!user || !userRole) return;
         setLoading(true);
         const data = await getConversations(user.id, userRole as 'seeker' | 'employer');
         setConversations(data);
         setLoading(false);
-    }
+    }, [user?.id, userRole]);
 
-    async function loadMessages(conversationId: string) {
+    const loadMessages = useCallback(async (conversationId: string) => {
         setMessagesLoading(true);
         const data = await getMessages(conversationId);
         setMessages(data);
         setMessagesLoading(false);
-    }
+    }, []);
 
-    function setActiveConversationId(id: string | null) {
+    const setActiveConversationId = useCallback((id: string | null) => {
         if (!id) {
             setActiveConversation(null);
             return;
         }
-        const conv = conversations.find((c) => c.id === id);
-        if (conv) {
-            setActiveConversation(conv);
-        }
-    }
+        setConversations((currentConversations) => {
+            const conv = currentConversations.find((c) => c.id === id);
+            if (conv) {
+                setActiveConversation(conv);
+            }
+            return currentConversations;
+        });
+    }, []);
 
-    async function sendMessage(content: string, file?: File) {
+    const sendMessage = useCallback(async (content: string, file?: File) => {
         if (!activeConversation || !user) return;
 
         // Optimistic update? Or wait? Let's wait for now to keep it simple and consistent
@@ -163,9 +166,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 ).sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
             );
         }
-    }
+    }, [activeConversation, user?.id]);
 
-    async function deleteMessage(messageId: string) {
+    const deleteMessage = useCallback(async (messageId: string) => {
         if (!user) return;
 
         const success = await apiDeleteMessage(messageId, user.id);
@@ -173,10 +176,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             // Remove message from state
             setMessages((prev) => prev.filter(m => m.id !== messageId));
         }
-    }
+    }, [user?.id]);
 
-    async function openChat(orgId: string, seekerId: string, jobId?: string) {
+    const openChat = useCallback(async (orgId: string, seekerId: string, jobId?: string) => {
         // Check local list first
+        // We need to use functional update or ref to get latest conversations if we don't want to depend on confirm
+        // But for openChat, depending on conversations is usually fine as it's not called often
+        // However, to be safe inside useMemo, we should probably rely on state setter or a ref?
+        // Let's just use the current conversations state as dependency, it changes every 10s anyway.
+        // Actually that defeats the purpose.
+        // Let's use getConversations from API if we want to be safe, but we want to avoid API call if possible.
+        // Let's check `conversations` in dependency.
+
         const existing = conversations.find(c => c.orgId === orgId && c.seekerId === seekerId);
         if (existing) {
             setActiveConversation(existing);
@@ -195,12 +206,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             setActiveConversation(conv);
         }
         setLoading(false);
-    }
+    }, [conversations]);
 
     // Calculate total unread count
     const unreadTotal = conversations.reduce((acc, curr) => acc + (curr.unreadCount || 0), 0);
 
-    const value = {
+    const value = useMemo(() => ({
         conversations,
         activeConversation,
         messages,
@@ -212,7 +223,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         deleteMessage,
         openChat,
         unreadTotal
-    };
+    }), [
+        conversations,
+        activeConversation,
+        messages,
+        loading,
+        messagesLoading,
+        unreadTotal,
+        loadConversations,
+        setActiveConversationId,
+        sendMessage,
+        deleteMessage,
+        openChat
+    ]);
 
     return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 }

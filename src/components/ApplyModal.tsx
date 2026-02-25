@@ -71,6 +71,20 @@ export function ApplyModal({ open, job, onClose, resumes, onSuccess }: ApplyModa
       return;
     }
 
+    // Validate screening questions
+    if (job.screening_questions) {
+      const missingRequired = job.screening_questions.some(q => q.required && !answers[q.id]?.trim());
+      if (missingRequired) {
+        setToastMessage({
+          title: 'Missing Answers',
+          description: 'Please answer all required screening questions.',
+          variant: 'error'
+        });
+        setShowToast(true);
+        return;
+      }
+    }
+
     setIsLoading(true);
     try {
       let resumeDocId = selectedResume;
@@ -188,19 +202,37 @@ export function ApplyModal({ open, job, onClose, resumes, onSuccess }: ApplyModa
             </label>
           </div>
 
-          <div className="grid gap-3">
-            <Textarea
-              label="Have you assisted in 4-hand dentistry?"
-              placeholder="Share your experience..."
-              value={answers.q1 || ''}
-              onChange={(e) => setAnswers({ ...answers, q1: e.target.value })}
-            />
-            <Textarea
-              label="Comfort with intraoral scanning?"
-              placeholder="IOS brands, number of scans done, etc."
-              value={answers.q2 || ''}
-              onChange={(e) => setAnswers({ ...answers, q2: e.target.value })}
-            />
+          <div className="grid gap-4">
+            {job?.screening_questions && job.screening_questions.length > 0 ? (
+              <>
+                <p className="text-sm font-semibold text-gray-800">Screening Questions</p>
+                {job.screening_questions.map((q) => (
+                  <div key={q.id}>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">
+                      {q.question} {q.required && <span className="text-red-500">*</span>}
+                    </label>
+                    {q.type === 'yes_no' ? (
+                      <Select
+                        value={answers[q.id] || ''}
+                        onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
+                      >
+                        <option value="">Select an answer</option>
+                        <option value="Yes">Yes</option>
+                        <option value="No">No</option>
+                      </Select>
+                    ) : (
+                      <Textarea
+                        placeholder="Your answer..."
+                        value={answers[q.id] || ''}
+                        onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
+                      />
+                    )}
+                  </div>
+                ))}
+              </>
+            ) : (
+              <p className="text-sm text-gray-500 italic">No screening questions for this role.</p>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2">

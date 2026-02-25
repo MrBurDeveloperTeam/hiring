@@ -29,6 +29,16 @@ export interface Job {
   orgId: string;
   logoUrl?: string;
   slug?: string;
+  screening_questions?: ScreeningQuestion[];
+  expiresAt?: string;
+}
+
+export interface ScreeningQuestion {
+  id: string;
+  question: string;
+  type: 'text' | 'yes_no' | 'multiple_choice';
+  required: boolean;
+  options?: string[]; // For multiple choice
 }
 
 export interface Candidate {
@@ -47,6 +57,8 @@ export interface Candidate {
   isFavorite?: boolean;
   resumePath?: string;
   seekerId?: string;
+  screeningAnswers?: Record<string, string>;
+  screeningQuestions?: ScreeningQuestion[];
 }
 
 

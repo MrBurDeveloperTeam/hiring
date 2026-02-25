@@ -121,7 +121,7 @@ export default function OrganizationTeam() {
         setIsGeneratingLink(true);
         try {
             const data = await createInviteLink(org.id, 'hr', linkExpiration);
-            const link = `${window.location.origin}/join?token=${data.token}`;
+            const link = `${window.location.origin}/join/${data.short_code}`;
             setGeneratedLink(link);
             showToast('Link generated successfully!');
         } catch (err: any) {
@@ -326,8 +326,8 @@ export default function OrganizationTeam() {
                                             {member.status}
                                         </Badge>
                                         <span className="text-sm text-gray-500 capitalize">{member.member_role}</span>
-                                        {/* Don't allow removing yourself (owner check needed properly, but simplistic check here) */}
-                                        {member.user_id !== user?.id && (
+                                        {/* Only owner can remove members */}
+                                        {(org?.membership_type === 'owner' || org?.member_role === 'owner') && member.user_id !== user?.id && (
                                             <button
                                                 onClick={() => handleRemove(member.id)}
                                                 className="text-gray-400 hover:text-red-600 transition-colors p-1"

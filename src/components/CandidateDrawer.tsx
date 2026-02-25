@@ -14,12 +14,13 @@ interface CandidateDrawerProps {
   open: boolean;
   onClose: () => void;
   onMove: (id: string, status: JobStage) => void;
+  onNotesUpdate?: (id: string, notes: string) => void;
   orgId?: string | null;
 }
 
 const actions: JobStage[] = ['Shortlisted', 'Interview', 'Offer', 'Rejected'];
 
-export function CandidateDrawer({ candidate, open, onClose, onMove, orgId }: CandidateDrawerProps) {
+export function CandidateDrawer({ candidate, open, onClose, onMove, onNotesUpdate, orgId }: CandidateDrawerProps) {
   const navigate = useNavigate();
   const [resumeUrl, setResumeUrl] = useState<string | null>(null);
   const [loadingResume, setLoadingResume] = useState(false);
@@ -62,11 +63,29 @@ export function CandidateDrawer({ candidate, open, onClose, onMove, orgId }: Can
     }
   }, [candidate, open]);
 
+  const handleClose = async () => {
+    if (candidate && notes !== candidate.notes) {
+      try {
+        await updateApplicationNotes(candidate.id, notes);
+        if (onNotesUpdate) onNotesUpdate(candidate.id, notes);
+      } catch (error) {
+        console.error('Error autosaving notes:', error);
+      }
+    }
+    onClose();
+  };
+
   if (!open || !candidate) return null;
 
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
-      <div className="h-full w-full max-w-xl overflow-y-auto bg-white shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/40"
+      onClick={handleClose}
+    >
+      <div
+        className="h-full w-full max-w-xl overflow-y-auto bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <div>
             <p className="text-lg font-semibold text-gray-900">{candidate.name}</p>
@@ -87,7 +106,7 @@ export function CandidateDrawer({ candidate, open, onClose, onMove, orgId }: Can
               </Button>
             )}
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="rounded-full p-2 text-gray-500 transition hover:bg-gray-100"
               aria-label="Close candidate drawer"
             >
@@ -117,6 +136,8 @@ export function CandidateDrawer({ candidate, open, onClose, onMove, orgId }: Can
               ))}
             </div>
           </div>
+
+
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-semibold text-gray-800">Resume</p>
@@ -172,6 +193,22 @@ export function CandidateDrawer({ candidate, open, onClose, onMove, orgId }: Can
               </div>
             )}
           </div>
+
+          {candidate.screeningQuestions && candidate.screeningQuestions.length > 0 && (
+            <div>
+              <p className="text-sm font-semibold text-gray-800 mb-2">Screening Questions</p>
+              <div className="space-y-3">
+                {candidate.screeningQuestions.map((q) => (
+                  <div key={q.id} className="rounded-lg bg-gray-50 p-3 text-sm">
+                    <p className="font-medium text-gray-900 mb-1">{q.question}</p>
+                    <p className="text-gray-600 whitespace-pre-wrap">
+                      {candidate.screeningAnswers?.[q.id] || <span className="italic text-gray-400">No answer provided</span>}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <Textarea
             label="Internal notes"
             placeholder="Add a quick note..."
@@ -182,6 +219,7 @@ export function CandidateDrawer({ candidate, open, onClose, onMove, orgId }: Can
               if (candidate && notes !== candidate.notes) {
                 try {
                   await updateApplicationNotes(candidate.id, notes);
+                  if (onNotesUpdate) onNotesUpdate(candidate.id, notes);
                 } catch (error) {
                   // handle error silently or show toast
                 }

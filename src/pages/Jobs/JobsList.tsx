@@ -12,6 +12,8 @@ import { getApplications } from '../../lib/api/applications';
 import { getUsersOrganizations } from '../../lib/api/organizations';
 import { useAuth } from '../../contexts/AuthContext';
 import { Toast } from '../../components/ui/toast';
+import { Modal } from '../../components/ui/modal';
+import { Button } from '../../components/ui/button';
 
 const defaultFilters: JobFilterState = {
   keyword: '',
@@ -23,7 +25,8 @@ const defaultFilters: JobFilterState = {
   training: false,
   internship: false,
   experienceLevel: '',
-  salaryMin: 0
+  salaryMin: 0,
+  country: ''
 };
 
 export default function JobsList() {
@@ -149,18 +152,29 @@ export default function JobsList() {
     }
   };
 
-  const handleDeleteJob = async (job: Job) => {
-    if (!window.confirm("Are you sure you want to delete this job? This action cannot be undone.")) return;
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<Job | null>(null);
+
+  const handleDeleteJob = (job: Job) => {
+    setJobToDelete(job);
+    setDeleteConfirmationOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!jobToDelete) return;
 
     try {
-      await deleteJob(job.id);
-      setJobs(prevJobs => prevJobs.filter(j => j.id !== job.id));
+      await deleteJob(jobToDelete.id);
+      setJobs(prevJobs => prevJobs.filter(j => j.id !== jobToDelete.id));
       setToastMessage('Job deleted successfully');
       setToastOpen(true);
     } catch (error) {
       console.error('Error deleting job:', error);
       setToastMessage('Failed to delete job');
       setToastOpen(true);
+    } finally {
+      setDeleteConfirmationOpen(false);
+      setJobToDelete(null);
     }
   };
 
@@ -328,6 +342,31 @@ export default function JobsList() {
         variant={toastMessage.includes('FAILED') ? 'error' : 'success'}
         action={undefined}
       />
+
+      <Modal
+        open={deleteConfirmationOpen}
+        onClose={() => setDeleteConfirmationOpen(false)}
+        title="Delete Job Posting"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Are you sure you want to delete this job posting? This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-3">
+            <Button variant="ghost" onClick={() => setDeleteConfirmationOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              className="bg-red-600 hover:bg-red-700 text-white border-transparent"
+              onClick={confirmDelete}
+            >
+              Delete Job
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </AppShell>
   );
 }

@@ -11,17 +11,20 @@ import { Toast } from '../../components/ui/toast';
 import { Breadcrumbs } from '../../components/Breadcrumbs';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { getJobBySlug } from '../../lib/api/jobs';
+import { getJobBySlug, createJob, updateJob } from '../../lib/api/jobs';
 import { getJobIdFromSlug } from '../../lib/utils';
+import { ScreeningQuestion } from '../../lib/types';
+import { Plus, X, ShieldAlert } from 'lucide-react';
 
 import { getUsersOrganizations } from '../../lib/api/organizations';
 import { useEmployerPoints } from '../../contexts/EmployerPointsContext';
+import { countries } from '../../lib/constants';
 
 function mapEmploymentTypeToDb(type: string): 'full_time' | 'part_time' | 'contract' | 'temporary' | 'internship' {
   const map: Record<string, string> = {
     'Full-time': 'full_time',
     'Part-time': 'part_time',
-    'Locum': 'contract', // Assuming Locum maps to contract or temporary based on DB enum. Let's check DB types if possible. 
+    'Locum': 'contract', // Assuming Locum maps to contract or temporary based on DB enum. Let's check DB types if possible.
     // Checking types.ts or previous context: DB enum is full_time, part_time, internship, contract, temporary.
     // So Locum -> contract is reasonable fallback or temporary.
     'Contract': 'contract',
@@ -42,6 +45,7 @@ const steps = [
   { id: 'basics', title: 'Job Basics', description: 'Role, location, employment' },
   { id: 'dental', title: 'Dental Requirements', description: 'Specialties & exposures' },
   { id: 'comp', title: 'Compensation & Schedule', description: 'Salary & shifts' },
+  { id: 'questions', title: 'Screening Questions', description: 'Add custom questions' },
   { id: 'review', title: 'Review & Publish', description: 'Confirm details' }
 ];
 
@@ -52,6 +56,8 @@ export default function PostJob() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const [orgId, setOrgId] = useState<string | null>(null);
+  const [orgVerifiedStatus, setOrgVerifiedStatus] = useState<string | null>(null);
+  const [loadingOrg, setLoadingOrg] = useState(true);
   const { points, deductPoints, addPoints } = useEmployerPoints();
   const { slug } = useParams<{ slug: string }>();
   const isEditMode = !!slug;
@@ -74,6 +80,8 @@ export default function PostJob() {
     employmentType: 'Full-time'
   });
 
+  const [screeningQuestions, setScreeningQuestions] = useState<ScreeningQuestion[]>([]);
+
   useEffect(() => {
     if (!user) return;
     async function fetchOrg() {
@@ -89,15 +97,19 @@ export default function PostJob() {
       const storedOrgId = localStorage.getItem('activeOrgId');
       const activeOrg = orgs.find(o => o.id === storedOrgId) || orgs[0];
 
-      if (activeOrg && !isEditMode) {
-        setOrgId(activeOrg.id);
-        setForm(f => ({
-          ...f,
-          clinicName: activeOrg.org_name,
-          city: activeOrg.city || '',
-          country: activeOrg.country || 'Malaysia'
-        }));
+      if (activeOrg) {
+        setOrgVerifiedStatus(activeOrg.verified_status || 'unverified');
+        if (!isEditMode) {
+          setOrgId(activeOrg.id);
+          setForm(f => ({
+            ...f,
+            clinicName: activeOrg.org_name,
+            city: activeOrg.city || '',
+            country: activeOrg.country || 'Malaysia'
+          }));
+        }
       }
+      setLoadingOrg(false);
     }
     fetchOrg();
   }, [user?.id, navigate, isEditMode]);
@@ -130,6 +142,11 @@ export default function PostJob() {
             preferredExperience: '', // Also not explicit in Job type
             employmentType: job.employmentType || 'Full-time'
           });
+
+          if (job.screening_questions) {
+            setScreeningQuestions(job.screening_questions);
+          }
+
           // TODO: Need to parse description back into requirements/schedule/preferred if possible
           // For now, simple load.
 
@@ -158,6 +175,28 @@ export default function PostJob() {
 
   const next = () => setActiveStep((s) => Math.min(s + 1, steps.length - 1));
   const prev = () => setActiveStep((s) => Math.max(s - 1, 0));
+
+  const addQuestion = () => {
+    setScreeningQuestions([
+      ...screeningQuestions,
+      {
+        id: crypto.randomUUID(),
+        question: '',
+        type: 'text',
+        required: true,
+        options: []
+      }
+    ]);
+  };
+
+  const updateQuestion = (id: string, updates: Partial<ScreeningQuestion>) => {
+    setScreeningQuestions(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
+  };
+
+  const removeQuestion = (id: string) => {
+    setScreeningQuestions(prev => prev.filter(q => q.id !== id));
+  };
+
 
   const insertJob = async (status: 'published' | 'draft') => {
     if (!orgId) {
@@ -194,7 +233,7 @@ export default function PostJob() {
       const minSal = parseInt(form.salaryMin.replace(/\D/g, ''), 10) || 0;
       const maxSal = parseInt(form.salaryMax.replace(/\D/g, ''), 10) || 0;
 
-      // Map role type to closest enum or 'other'. 
+      // Map role type to closest enum or 'other'.
       // For simplicity, we downcast to any or 'other' if needed, but DB likely strictly checks.
       // Provide a best-effort map or simplistic lower case match.
       const roleTypeMap: Record<string, string> = {
@@ -229,56 +268,40 @@ export default function PostJob() {
         status: status,
         city: form.city,
         country: form.country,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        screening_questions: screeningQuestions // Add screening questions
       };
 
-      let error;
+      let error = null;
+      let jobResult: any = null;
 
       if (isEditMode && slug) {
-        // Update existing
-        // We need the ID. Slug might be enough if unique, but let's confirm.
-        // Since we trust slug is unique or we can parse ID from it.
-        // Let's resolve ID first ideally.
-        // BUT if we just use slug logic:
-        // If slug is clean, we can query by slug. If slug has ID, we extract ID.
-
-        const jobId = getJobIdFromSlug(slug);
-
-        if (jobId.match(/^[0-9a-f]{8}-/)) {
-          // Update by UUID
-          const { org_id, ...updatePayload } = payload;
-          const { error: updateError, data: updateData } = await supabase.from('jobs').update(updatePayload).eq('id', jobId).select();
-          error = updateError;
-          if (!error && (!updateData || updateData.length === 0)) {
-            error = { message: "Update failed: Job not found or permission denied." } as any;
-          }
-        } else {
-          // Update by slug column
-          const { org_id, ...updatePayload } = payload;
-          const { error: updateError, data: updateData } = await supabase.from('jobs').update(updatePayload).eq('slug', slug).select();
-          error = updateError;
-          if (!error && (!updateData || updateData.length === 0)) {
-            error = { message: "Update failed: Job not found or permission denied." } as any;
-          }
+        try {
+          const jobId = getJobIdFromSlug(slug);
+          jobResult = await updateJob(jobId, payload);
+        } catch (e: any) {
+          error = e;
         }
       } else {
         // Create New - use first 8 chars of a generated UUID for consistent slug format
         const roleSlug = form.roleType.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-        // Generate a UUID-like ID prefix for the slug (will be replaced with actual ID after insert)
+        // Generate a UUID-like ID prefix for the slug
         const tempId = crypto.randomUUID().substring(0, 8);
         const newSlug = `${roleSlug}-${tempId}`;
 
-        const { error: insertError } = await supabase.from('jobs').insert({
-          ...payload,
-          slug: newSlug
-        });
-        error = insertError;
+        try {
+          jobResult = await createJob({
+            ...payload,
+            slug: newSlug
+          });
+        } catch (e: any) {
+          error = e;
+        }
       }
 
       if (error) {
         console.error(error);
-        alert(`Error ${status === 'published' ? 'publishing' : 'saving'}: ` + error.message);
-        // Refund if specific error and was published
+        alert(`Error ${status === 'published' ? 'publishing' : 'saving'}: ` + (error.message || error));
         // Refund if specific error and was published AND it was a new job
         if (!isEditMode && status === 'published') addPoints(JOB_COST);
       } else {
@@ -302,170 +325,277 @@ export default function PostJob() {
       hideNavigation
     >
       {/* <Breadcrumbs items={[{ label: 'Employer Home', to: '/employers' }, { label: 'Post Job' }]} /> */}
-      <Stepper steps={steps} activeStep={activeStep} />
 
-      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-        {activeStep === 0 && (
-          <div className="grid gap-4 md:grid-cols-2">
-            <Select
-              label="Role title"
-              value={form.roleType}
-              onChange={(e) => setForm({ ...form, roleType: e.target.value })}
-              disabled={isEditMode}
-            >
-              <option>Dental Assistant</option>
-              <option>Dentist (GP)</option>
-              <option>Dentist (Specialist)</option>
-              <option>Dental Nurse</option>
-              <option>Dental Hygienist</option>
-              <option>Receptionist</option>
-              <option>Clinic Manager</option>
-              <option>Lab Technician</option>
-            </Select>
-            <Input
-              label="Clinic name"
-              value={form.clinicName}
-              onChange={(e) => setForm({ ...form, clinicName: e.target.value })}
-            />
-            <Input label="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-            <Select
-              label="Country"
-              value={form.country}
-              onChange={(e) => setForm({ ...form, country: e.target.value })}
-            >
-              <option>Malaysia</option>
-              <option>Singapore</option>
-            </Select>
-            <Select
-              label="Experience level"
-              value={form.experienceLevel}
-              onChange={(e) => setForm({ ...form, experienceLevel: e.target.value })}
-            >
-              <option>Entry</option>
-              <option>Junior</option>
-              <option>Mid</option>
-              <option>Senior</option>
-            </Select>
-            <Select
-              label="Employment type"
-              value={form.employmentType}
-              onChange={(e) => setForm({ ...form, employmentType: e.target.value })}
-            >
-              <option>Full-time</option>
-              <option>Part-time</option>
-              <option>Locum</option>
-              <option>Contract</option>
-            </Select>
-            <Checkbox
-              label="New grad welcome"
-              checked={form.newGradWelcome}
-              onChange={(e) => setForm({ ...form, newGradWelcome: e.target.checked })}
-            />
-            <Checkbox
-              label="Training provided"
-              checked={form.trainingProvided}
-              onChange={(e) => setForm({ ...form, trainingProvided: e.target.checked })}
-            />
-          </div>
-        )}
-
-        {activeStep === 1 && (
-          <div className="grid gap-4">
-            <Textarea
-              label="Specialty tags"
-              value={form.specialtyTags}
-              onChange={(e) => setForm({ ...form, specialtyTags: e.target.value })}
-              hint="Comma-separated tags e.g. Intraoral scanning, Sterilization, Implants"
-            />
-            <Textarea
-              label="Key requirements"
-              placeholder="Rubber dam, sterilization, chairside charting..."
-              value={form.requirements}
-              onChange={(e) => setForm({ ...form, requirements: e.target.value })}
-            />
-            <Textarea
-              label="Preferred experience"
-              placeholder="1+ year in chairside support..."
-              value={form.preferredExperience}
-              onChange={(e) => setForm({ ...form, preferredExperience: e.target.value })}
-            />
-          </div>
-        )}
-
-        {activeStep === 2 && (
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Salary Min (MYR)"
-                value={form.salaryMin}
-                onChange={(e) => setForm({ ...form, salaryMin: e.target.value })}
-              />
-              <Input
-                label="Salary Max (MYR)"
-                value={form.salaryMax}
-                onChange={(e) => setForm({ ...form, salaryMax: e.target.value })}
-              />
-            </div>
-            <Input
-              label="Schedule"
-              value={form.schedule}
-              onChange={(e) => setForm({ ...form, schedule: e.target.value })}
-            />
-            <Textarea
-              className="md:col-span-2"
-              label="Benefits"
-              value={form.benefits}
-              onChange={(e) => setForm({ ...form, benefits: e.target.value })}
-            />
-          </div>
-        )}
-
-        {activeStep === 3 && (
-          <div className="space-y-3 text-sm text-gray-700">
-            <p className="text-lg font-semibold text-gray-900">Review</p>
-            <p>
-              <strong>Role:</strong> {form.roleType}
-            </p>
-            <p>
-              <strong>Clinic:</strong> {form.clinicName} - {form.city}, {form.country}
-            </p>
-            <p>
-              <strong>Specialties:</strong> {form.specialtyTags}
-            </p>
-            <p>
-              <strong>Salary:</strong> RM {form.salaryMin} - RM {form.salaryMax}
-            </p>
-            <p>
-              <strong>Benefits:</strong> {form.benefits}
-            </p>
-          </div>
-        )}
-
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={prev} disabled={activeStep === 0}>
-              Back
-            </Button>
-            {activeStep < steps.length - 1 && (
-              <Button variant="primary" onClick={next}>
-                Next
-              </Button>
-            )}
-            {activeStep === steps.length - 1 && (
-              <Button variant="primary" onClick={() => insertJob('published')} disabled={isSubmitting}>
-                {isSubmitting ? 'Publishing...' : isEditMode ? 'Save Changes' : 'Publish (-20 credits)'}
-              </Button>
-            )}
-          </div>
+      {/* Block job posting if org is not verified */}
+      {loadingOrg ? (
+        <div className="flex h-64 items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand border-t-transparent"></div>
         </div>
-      </div>
+      ) : orgVerifiedStatus && orgVerifiedStatus !== 'verified' ? (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-amber-200 bg-amber-50 p-10 text-center shadow-sm">
+          <ShieldAlert className="h-14 w-14 text-amber-500 mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Organization Not Verified</h2>
+          <p className="text-gray-600 mb-1 max-w-md">
+            Your organization must be verified by an admin before you can post job listings.
+          </p>
+          <p className="text-sm text-gray-500 mb-6 max-w-md">
+            Current status: <span className="font-medium capitalize">{orgVerifiedStatus}</span>
+          </p>
+          <Button variant="primary" onClick={() => navigate('/employer/organization')}>
+            Go to Organization Profile
+          </Button>
+        </div>
+      ) : (
+        <>
+          <Stepper steps={steps} activeStep={activeStep} />
 
-      <Toast
-        open={showToast}
-        onClose={() => setShowToast(false)}
-        title={isEditMode ? "Job updated" : "Job published"}
-        description={isEditMode ? "Your changes have been saved." : "Redirecting to dashboard..."}
-      />
+          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+            {activeStep === 0 && (
+              <div className="grid gap-4 md:grid-cols-2">
+                <Select
+                  label="Role title"
+                  value={form.roleType}
+                  onChange={(e) => setForm({ ...form, roleType: e.target.value })}
+                  disabled={isEditMode}
+                >
+                  <option>Dental Assistant</option>
+                  <option>Dentist (GP)</option>
+                  <option>Dentist (Specialist)</option>
+                  <option>Dental Nurse</option>
+                  <option>Dental Hygienist</option>
+                  <option>Receptionist</option>
+                  <option>Clinic Manager</option>
+                  <option>Lab Technician</option>
+                </Select>
+                <Input
+                  label="Clinic name"
+                  value={form.clinicName}
+                  onChange={(e) => setForm({ ...form, clinicName: e.target.value })}
+                />
+                <Input label="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+                <Select
+                  label="Country"
+                  value={form.country}
+                  onChange={(e) => setForm({ ...form, country: e.target.value })}
+                >
+                  {countries.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </Select>
+                <Select
+                  label="Experience level"
+                  value={form.experienceLevel}
+                  onChange={(e) => setForm({ ...form, experienceLevel: e.target.value })}
+                >
+                  <option>Entry</option>
+                  <option>Junior</option>
+                  <option>Mid</option>
+                  <option>Senior</option>
+                </Select>
+                <Select
+                  label="Employment type"
+                  value={form.employmentType}
+                  onChange={(e) => setForm({ ...form, employmentType: e.target.value })}
+                >
+                  <option>Full-time</option>
+                  <option>Part-time</option>
+                  <option>Locum</option>
+                  <option>Contract</option>
+                </Select>
+                <Checkbox
+                  label="New grad welcome"
+                  checked={form.newGradWelcome}
+                  onChange={(e) => setForm({ ...form, newGradWelcome: e.target.checked })}
+                />
+                <Checkbox
+                  label="Training provided"
+                  checked={form.trainingProvided}
+                  onChange={(e) => setForm({ ...form, trainingProvided: e.target.checked })}
+                />
+              </div>
+            )}
+
+            {activeStep === 1 && (
+              <div className="grid gap-4">
+                <Textarea
+                  label="Specialty tags"
+                  value={form.specialtyTags}
+                  onChange={(e) => setForm({ ...form, specialtyTags: e.target.value })}
+                  hint="Comma-separated tags e.g. Intraoral scanning, Sterilization, Implants"
+                />
+                <Textarea
+                  label="Key requirements"
+                  placeholder="Rubber dam, sterilization, chairside charting..."
+                  value={form.requirements}
+                  onChange={(e) => setForm({ ...form, requirements: e.target.value })}
+                />
+                <Textarea
+                  label="Preferred experience"
+                  placeholder="1+ year in chairside support..."
+                  value={form.preferredExperience}
+                  onChange={(e) => setForm({ ...form, preferredExperience: e.target.value })}
+                />
+              </div>
+            )}
+
+            {activeStep === 2 && (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Salary Min (MYR)"
+                    type="number"
+                    value={form.salaryMin}
+                    onChange={(e) => setForm({ ...form, salaryMin: e.target.value })}
+                  />
+                  <Input
+                    label="Salary Max (MYR)"
+                    type="number"
+                    value={form.salaryMax}
+                    onChange={(e) => setForm({ ...form, salaryMax: e.target.value })}
+                  />
+                </div>
+                <Input
+                  label="Schedule"
+                  value={form.schedule}
+                  onChange={(e) => setForm({ ...form, schedule: e.target.value })}
+                />
+                <Textarea
+                  className="md:col-span-2"
+                  label="Benefits"
+                  value={form.benefits}
+                  onChange={(e) => setForm({ ...form, benefits: e.target.value })}
+                />
+              </div>
+            )}
+
+            {/* Screening Questions Step */}
+            {activeStep === 3 && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900">Screening Questions</h3>
+                    <p className="text-sm text-gray-500">Ask candidates specific questions when they apply.</p>
+                  </div>
+                  <Button onClick={addQuestion} size="sm" variant="outline" className="gap-2">
+                    <Plus className="h-4 w-4" /> Add Question
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {screeningQuestions.length === 0 ? (
+                    <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                      <p className="text-gray-500">No screening questions added yet.</p>
+                      <Button onClick={addQuestion} variant="ghost" className="text-brand">Add your first question</Button>
+                    </div>
+                  ) : (
+                    screeningQuestions.map((q, idx) => (
+                      <div key={q.id} className="p-4 bg-gray-50 border border-gray-200 rounded-lg relative group">
+                        <button
+                          onClick={() => removeQuestion(q.id)}
+                          className="absolute top-2 right-2 text-gray-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+
+                        <div className="space-y-3">
+                          <Input
+                            label={`Question ${idx + 1}`}
+                            value={q.question}
+                            onChange={(e) => updateQuestion(q.id, { question: e.target.value })}
+                            placeholder="e.g. Do you have a valid APC?"
+                          />
+
+                          <div className="flex gap-4">
+                            <div className="w-1/3">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Response Type</label>
+                              <select
+                                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                                value={q.type}
+                                onChange={(e) => updateQuestion(q.id, { type: e.target.value as any })}
+                              >
+                                <option value="text">Free Text</option>
+                                <option value="yes_no">Yes / No</option>
+                                {/* <option value="multiple_choice">Multiple Choice</option> */}
+                              </select>
+                            </div>
+                            <div className="flex items-center pt-6">
+                              <Checkbox
+                                label="Required"
+                                checked={q.required}
+                                onChange={(e) => updateQuestion(q.id, { required: e.target.checked })}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeStep === 4 && (
+              <div className="space-y-3 text-sm text-gray-700">
+                <p className="text-lg font-semibold text-gray-900">Review</p>
+                <div className="mb-4 rounded-lg bg-brand/5 border border-brand/10 p-4">
+                  <p className="text-brand font-medium">Job Expiration Notice</p>
+                  <p className="text-brand/80">Once published, this job listing will be active for 30 days. After 30 days, it will automatically expire and be hidden from search results.</p>
+                </div>
+                <p>
+                  <strong>Role:</strong> {form.roleType}
+                </p>
+                <p>
+                  <strong>Clinic:</strong> {form.clinicName} - {form.city}, {form.country}
+                </p>
+                <p>
+                  <strong>Specialties:</strong> {form.specialtyTags}
+                </p>
+                <p>
+                  <strong>Salary:</strong> RM {form.salaryMin} - RM {form.salaryMax}
+                </p>
+                <p>
+                  <strong>Benefits:</strong> {form.benefits}
+                </p>
+                {screeningQuestions.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <strong>Screening Questions:</strong>
+                    <ul className="list-disc pl-5 mt-1 space-y-1">
+                      {screeningQuestions.map(q => (
+                        <li key={q.id}>{q.question} <span className="text-gray-400 text-xs">({q.type})</span></li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={prev} disabled={activeStep === 0}>
+                  Back
+                </Button>
+                {activeStep < steps.length - 1 && (
+                  <Button variant="primary" onClick={next}>
+                    Next
+                  </Button>
+                )}
+                {activeStep === steps.length - 1 && (
+                  <Button variant="primary" onClick={() => insertJob('published')} disabled={isSubmitting}>
+                    {isSubmitting ? 'Publishing...' : isEditMode ? 'Save Changes' : 'Publish (-20 credits)'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <Toast
+            open={showToast}
+            onClose={() => setShowToast(false)}
+            title={isEditMode ? "Job updated" : "Job published"}
+            description={isEditMode ? "Your changes have been saved." : "Redirecting to dashboard..."}
+          />
+        </>
+      )}
     </DashboardShell>
   );
 }

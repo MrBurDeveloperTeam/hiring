@@ -5,7 +5,7 @@ import { Job } from '../lib/types';
 import { Badge } from './ui/badge';
 import { TagPill } from './TagPill';
 import { Button } from './ui/button';
-import { timeAgo, createJobSlug } from '../lib/utils';
+import { timeAgo, createJobSlug, getRemainingDays } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -54,6 +54,7 @@ export function JobCard({ job, onApply, isSaved, onToggleSave, onHide, isHidden,
       </div>
     );
   }
+
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -69,8 +70,6 @@ export function JobCard({ job, onApply, isSaved, onToggleSave, onHide, isHidden,
       role="button"
       tabIndex={0}
     >
-      {/* Action buttons moved to float-right section */}
-
       <div className="float-right ml-4 mb-2 flex flex-col items-end gap-2 text-right">
         <div className="flex items-center gap-1">
           {onToggleSave && (
@@ -88,7 +87,7 @@ export function JobCard({ job, onApply, isSaved, onToggleSave, onHide, isHidden,
             </button>
           )}
 
-          {userRole === 'admin' && onDelete ? (
+          {((userRole === 'admin' || canEdit) && onDelete) ? (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -124,8 +123,6 @@ export function JobCard({ job, onApply, isSaved, onToggleSave, onHide, isHidden,
             />
           </div>
         )}
-
-
       </div>
 
       <div className="space-y-1 mb-4">
@@ -179,7 +176,6 @@ export function JobCard({ job, onApply, isSaved, onToggleSave, onHide, isHidden,
             <TagPill key={tag} label={tag} />
           ))}
         </div>
-
         <div className="flex items-center gap-2 shrink-0">
           <Button variant="outline" size="sm" asChild>
             <Link to={`/jobs/${createJobSlug(job)}`} onClick={(event) => event.stopPropagation()}>
@@ -219,13 +215,17 @@ export function JobCard({ job, onApply, isSaved, onToggleSave, onHide, isHidden,
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 text-sm text-gray-600 pt-2 border-t border-gray-100">
-        {job.requirements.slice(0, 2).map((req) => (
-          <span key={req} className="rounded-full bg-gray-100 px-3 py-1">
-            {req}
+      {job.expiresAt && getRemainingDays(job.expiresAt) !== null && (
+        <div className="flex items-center justify-end gap-1.5 text-xs px-2 -mt-3 mb-4 text-gray-400">
+          <Sparkles className="h-3 w-3 text-brand/50" />
+          <span className={cn(
+            "font-medium",
+            (getRemainingDays(job.expiresAt) || 0) <= 5 ? "text-red-500" : "hover:text-gray-500 transition-colors"
+          )}>
+            Applications close in {getRemainingDays(job.expiresAt)} days
           </span>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

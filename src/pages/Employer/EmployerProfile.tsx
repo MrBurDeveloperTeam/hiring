@@ -8,7 +8,7 @@ import { Toast } from '../../components/ui/toast';
 import { Modal } from '../../components/ui/modal';
 
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { workerGet, workerPut } from '../../lib/api/apiClient';
 import { Breadcrumbs } from '../../components/Breadcrumbs';
 
 export default function EmployerProfile() {
@@ -23,10 +23,6 @@ export default function EmployerProfile() {
         navigate('/');
     };
 
-    // User Profile API not fully established, so we'll likely fetch from 'profiles' or 'auth.users' metadata?
-    // Usually standard pattern is a 'profiles' table.
-    // Standard pattern is a 'profiles' table.
-
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [email, setEmail] = useState('');
@@ -40,29 +36,21 @@ export default function EmployerProfile() {
 
         async function loadProfile() {
             try {
-                // Fetch from PUBLIC 'profiles' table if it exists and RLS allows.
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('user_id', user!.id)
-                    .single();
-
-                if (error && error.code !== 'PGRST116') {
-                    console.error("Error loading profile:", error);
-                }
+                const result = await workerGet('/api/profiles/me') as any;
+                const data = result.profile || result.data;
 
                 if (data) {
                     setName(data.name || '');
                     setPhone(data.phone || '');
                 }
             } catch (err) {
-                console.error(err);
+                console.error("Error loading profile:", err);
             } finally {
                 setLoading(false);
             }
         }
         loadProfile();
-    }, [user, supabase]);
+    }, [user]);
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -70,16 +58,11 @@ export default function EmployerProfile() {
         setSaving(true);
 
         try {
-            const updates = {
-                user_id: user.id,
+            await workerPut('/api/profiles/me', {
                 name: name,
                 phone: phone,
-                email: user.email!, // Required by schema
                 updated_at: new Date().toISOString(),
-            };
-
-            const { error } = await supabase.from('profiles').upsert(updates);
-            if (error) throw error;
+            });
 
             setToastMessage("Profile updated successfully");
             setToastOpen(true);

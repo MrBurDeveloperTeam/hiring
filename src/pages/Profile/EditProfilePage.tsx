@@ -9,7 +9,8 @@ import { Button } from '../../components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { Camera, UploadCloud, ScanText, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase'; // kept for storage uploads only
+import { workerGet, workerPut, workerPost } from '../../lib/api/apiClient';
 import { Database } from '../../lib/database.types';
 import { extractTextFromPDF } from '../../lib/utils/pdf';
 import { parseResumeWithGemini } from '../../lib/services/resume';
@@ -20,7 +21,7 @@ import { addEducation } from '../../lib/api/education';
 import { addWorkExperience } from '../../lib/api/work_experience';
 import { Modal } from '../../components/ui/modal';
 import { Toast } from '../../components/ui/toast';
-import { formatDate } from '../../lib/utils';
+import { formatDate, toPostgresDate } from '../../lib/utils';
 
 const sidebarLinks = [
     { to: '/seekers/dashboard', label: 'Dashboard' },
@@ -30,6 +31,7 @@ const sidebarLinks = [
 const defaultProfileFields = {
     fullName: '',
     email: '',
+    phone: '',
     school: '',
     graduation: '',
     seekerType: 'student',
@@ -93,32 +95,24 @@ export default function EditProfilePage() {
             if (!user) return;
             setLoading(true);
             try {
-                // Fetch profile
-                const { data: profileData } = await supabase
-                    .from('profiles')
-                    .select('name, avatar_url')
-                    .eq('user_id', user.id)
-                    .single();
+                // Fetch profile via Worker
+                const profileResult = await workerGet('/api/profiles/me') as any;
+                const profileData = profileResult.profile || profileResult.data;
 
-                // Fetch seeker profile
-                const { data: seekerData } = await supabase
-                    .from('seeker_profiles')
-                    .select('school_name, expected_graduation_date, clinical_exposures, seeker_type')
-                    .eq('user_id', user.id)
-                    .single();
+                // Fetch seeker profile via Worker
+                const seekerResult = await workerGet(`/api/seekers/${user.id}`) as any;
+                const seekerData = seekerResult.data?.seekerProfile || null;
 
-                // Fetch resumes/documents
-                const { data: resumeData } = await supabase
-                    .from('seeker_documents')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .order('created_at', { ascending: false });
+                // Fetch resumes/documents via Worker
+                const docsResult = await workerGet(`/api/documents?userId=${user.id}`);
+                const resumeData = docsResult.data || [];
 
                 if (profileData) {
                     setProfileFields(prev => ({
                         ...prev,
                         fullName: profileData.name || '',
                         email: user.email || '',
+                        phone: profileData.phone || '',
                         avatarUrl: profileData.avatar_url || '',
                     }));
                 }
@@ -199,27 +193,20 @@ export default function EditProfilePage() {
                 currentAvatarUrl = `${publicUrl}?t=${Date.now()}`;
             }
 
-            const { error: profileError } = await supabase
-                .from('profiles')
-                .update({
-                    name: profileFields.fullName,
-                    avatar_url: currentAvatarUrl
-                })
-                .eq('user_id', user.id);
+            // Update profile via Worker
+            await workerPut('/api/profiles/me', {
+                name: profileFields.fullName,
+                phone: profileFields.phone,
+                avatar_url: currentAvatarUrl
+            });
 
-            if (profileError) throw profileError;
-
-            const { error: seekerError } = await supabase
-                .from('seeker_profiles')
-                .upsert({
-                    user_id: user.id,
-                    school_name: profileFields.school,
-                    expected_graduation_date: profileFields.graduation ? `${profileFields.graduation}-01` : null,
-                    clinical_exposures: selectedExposures,
-                    seeker_type: profileFields.seekerType as Database['public']['Enums']['seeker_type']
-                }, { onConflict: 'user_id' });
-
-            if (seekerError) throw seekerError;
+            // Upsert seeker profile via Worker
+            await workerPut('/api/seeker-profiles', {
+                school_name: profileFields.school,
+                expected_graduation_date: profileFields.graduation ? `${profileFields.graduation}-01` : null,
+                clinical_exposures: selectedExposures,
+                seeker_type: profileFields.seekerType
+            });
 
             setToastContent({ title: 'Success', description: 'Profile saved successfully!' });
             setShowToast(true);
@@ -251,19 +238,17 @@ export default function EditProfilePage() {
                 .from('resumes')
                 .getPublicUrl(filePath);
 
-            await supabase.from('seeker_documents').insert({
+            // Insert document via Worker
+            await workerPost('/api/documents', {
                 user_id: user.id,
                 title: file.name,
                 storage_path: publicUrl,
-                doc_type: 'resume' as const,
+                doc_type: 'resume',
             });
 
-            // Refresh resumes
-            const { data: resumeData } = await supabase
-                .from('seeker_documents')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false });
+            // Refresh resumes via Worker
+            const docsRefreshResult = await workerGet(`/api/documents?userId=${user.id}`);
+            const resumeData = docsRefreshResult.data || [];
 
             if (resumeData && resumeData.length > 0) {
                 const mappedResumes = resumeData.map(r => ({
@@ -338,18 +323,27 @@ export default function EditProfilePage() {
             setProfileFields(prev => ({
                 ...prev,
                 fullName: parsed.fullName || prev.fullName,
+                phone: parsed.phone || prev.phone,
                 school: parsed.school || prev.school,
                 graduation: parsed.graduationDate || prev.graduation
             }));
 
             if (parsed.education && parsed.education.length > 0) {
                 for (const edu of parsed.education) {
-                    await addEducation(user!.id, edu);
+                    await addEducation(user!.id, {
+                        ...edu,
+                        startDate: toPostgresDate(edu.startDate) || undefined,
+                        endDate: toPostgresDate(edu.endDate) || undefined,
+                    });
                 }
             }
             if (parsed.workExperience && parsed.workExperience.length > 0) {
                 for (const exp of parsed.workExperience) {
-                    await addWorkExperience(user!.id, exp);
+                    await addWorkExperience(user!.id, {
+                        ...exp,
+                        startDate: toPostgresDate(exp.startDate) || undefined,
+                        endDate: toPostgresDate(exp.endDate) || undefined,
+                    });
                 }
             }
 
@@ -446,12 +440,21 @@ export default function EditProfilePage() {
                                 className="text-base px-4 py-3"
                             />
                             <Input
+                                label="Phone"
+                                type="tel"
+                                value={profileFields.phone}
+                                onChange={(e) => handleFieldChange('phone', e.target.value)}
+                                placeholder="+60 12-345 6789"
+                                containerClassName="text-base"
+                                className="text-base px-4 py-3"
+                            />
+                            <Input
                                 label="Email"
                                 type="email"
                                 value={profileFields.email}
                                 disabled
-                                className="bg-gray-50 text-base px-4 py-3"
-                                containerClassName="text-base"
+                                className="bg-gray-50 text-base px-4 py-3 md:col-span-2"
+                                containerClassName="text-base md:col-span-2"
                             />
                         </div>
                     </div>
