@@ -48,13 +48,35 @@ export function currency(amount: number) {
 
 export function toPostgresDate(date?: string): string | null {
   if (!date) return null;
-  if (/^\d{4}-\d{2}$/.test(date)) {
-    return `${date}-01`;
+
+  // Handle YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.sssZ
+  // If it's already a full date, just ensure it's not using "00" month or day
+  if (date.includes('-')) {
+    const parts = date.split('T')[0].split('-');
+    if (parts.length >= 2) {
+      let year = parts[0];
+      let month = parts[1];
+      let day = parts[2] || '01';
+
+      // Normalize month "00" or invalid months to "01"
+      if (month === '00' || parseInt(month) > 12 || parseInt(month) < 1) {
+        month = '01';
+      }
+
+      // Normalize day "00" or invalid days to "01"
+      if (day === '00' || parseInt(day) > 31 || parseInt(day) < 1) {
+        day = '01';
+      }
+
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
   }
+
   // If it's just a year YYYY
   if (/^\d{4}$/.test(date)) {
     return `${date}-01-01`;
   }
+
   return date;
 }
 // Helper to create SEO-friendly slugs: "dental-assistant-7c57b5e6"
