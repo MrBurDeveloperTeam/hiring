@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return true;
       }
     } catch (error: any) {
-      // 401 is expected for unauthenticated users
+      await supabase.auth.signOut();
       if (error.message?.includes('401') || error.message?.includes('Not authenticated') || error.message?.includes('missing_sso')) {
         console.info('SSO: No active session found (guest user)');
       } else {
