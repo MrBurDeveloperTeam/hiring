@@ -58,6 +58,7 @@ export default function PostJob() {
   const [orgId, setOrgId] = useState<string | null>(null);
   const [orgVerifiedStatus, setOrgVerifiedStatus] = useState<string | null>(null);
   const [loadingOrg, setLoadingOrg] = useState(true);
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const { points, deductPoints, addPoints } = useEmployerPoints();
   const { slug } = useParams<{ slug: string }>();
   const isEditMode = !!slug;
@@ -73,6 +74,7 @@ export default function PostJob() {
     trainingProvided: true,
     salaryMin: '2800',
     salaryMax: '3500',
+    currency: 'MYR',
     schedule: '5-day week, rotating weekends',
     benefits: 'Medical coverage, CPD allowance, Annual bonus',
     requirements: '',
@@ -124,6 +126,7 @@ export default function PostJob() {
       try {
         const job = await getJobBySlug(slug);
         if (job) {
+          setEditingJobId(job.id);
           setOrgId(job.orgId);
           setForm({
             roleType: job.roleType,
@@ -134,8 +137,9 @@ export default function PostJob() {
             experienceLevel: job.experienceLevel,
             newGradWelcome: job.newGradWelcome,
             trainingProvided: job.trainingProvided,
-            salaryMin: job.salaryRange.replace(/[^0-9-]/g, '').split('-')[0] || '',
-            salaryMax: job.salaryRange.replace(/[^0-9-]/g, '').split('-')[1] || '',
+            salaryMin: String(job.salaryMin || ''),
+            salaryMax: String(job.salaryMax || ''),
+            currency: job.currency || 'MYR',
             schedule: '', // Schedule isn't a direct field in Job type returned by API, might serve from description
             benefits: job.benefits.join(', '),
             requirements: job.requirements.join('\n'), // Since we store as array
@@ -260,7 +264,7 @@ export default function PostJob() {
         description: `Requirements:\n${form.requirements}\n\nPreferred Experience:\n${form.preferredExperience}\n\nSchedule:\n${form.schedule}`,
         salary_min: minSal,
         salary_max: maxSal,
-        currency: 'MYR', // Default
+        currency: form.currency,
         benefits: { list: form.benefits.split(',').map(s => s.trim()) },
         dental_requirements: {}, // Default empty
         new_grad_welcome: form.newGradWelcome,
@@ -277,7 +281,7 @@ export default function PostJob() {
 
       if (isEditMode && slug) {
         try {
-          const jobId = getJobIdFromSlug(slug);
+          const jobId = editingJobId || getJobIdFromSlug(slug); // Prefer stored real ID
           jobResult = await updateJob(jobId, payload);
         } catch (e: any) {
           error = e;
@@ -440,15 +444,28 @@ export default function PostJob() {
 
             {activeStep === 2 && (
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4 md:col-span-2">
+                  <Select
+                    label="Currency"
+                    value={form.currency}
+                    onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                  >
+                    <option value="MYR">MYR</option>
+                    <option value="SGD">SGD</option>
+                    <option value="USD">USD</option>
+                    <option value="AUD">AUD</option>
+                    <option value="GBP">GBP</option>
+                    <option value="EUR">EUR</option>
+                    <option value="IDR">IDR</option>
+                  </Select>
                   <Input
-                    label="Salary Min (MYR)"
+                    label="Salary Min"
                     type="number"
                     value={form.salaryMin}
                     onChange={(e) => setForm({ ...form, salaryMin: e.target.value })}
                   />
                   <Input
-                    label="Salary Max (MYR)"
+                    label="Salary Max"
                     type="number"
                     value={form.salaryMax}
                     onChange={(e) => setForm({ ...form, salaryMax: e.target.value })}
@@ -551,7 +568,7 @@ export default function PostJob() {
                   <strong>Specialties:</strong> {form.specialtyTags}
                 </p>
                 <p>
-                  <strong>Salary:</strong> RM {form.salaryMin} - RM {form.salaryMax}
+                  <strong>Salary:</strong> {form.currency} {form.salaryMin} - {form.salaryMax}
                 </p>
                 <p>
                   <strong>Benefits:</strong> {form.benefits}

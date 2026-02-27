@@ -26,6 +26,7 @@ export interface Job {
   description: string;
   salaryMin?: number;
   salaryMax?: number;
+  currency?: string;
   orgId: string;
   logoUrl?: string;
   slug?: string;

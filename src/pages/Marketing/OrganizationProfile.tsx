@@ -97,9 +97,8 @@ export default function OrganizationProfile() {
             if (!orgName) return;
             try {
                 if (!organization) setLoading(true);
-                // Decode URI component just in case, though react-router might handle it
-                const decodedName = decodeURIComponent(orgName);
-                const orgData = await getOrganizationByName(decodedName);
+                // React router automatically decodes the URI component
+                const orgData = await getOrganizationByName(orgName);
 
                 if (orgData) {
                     setOrganization(orgData);

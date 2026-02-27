@@ -24,6 +24,12 @@ export async function getConversations(userId: string, role: 'seeker' | 'employe
         const result = await workerGet(`/api/chat/conversations`);
         return (result.data || []).map((c: any) => ({
             ...c,
+            id: c.id,
+            orgId: c.org_id,
+            seekerId: c.seeker_id,
+            jobId: c.job_id,
+            createdAt: c.created_at,
+            lastMessageAt: c.last_message_at,
             // Map 'organizations' (from API alias) to 'organization' (frontend type)
             organization: Array.isArray(c.organizations) ? c.organizations[0] : c.organizations,
             // Ensure seeker is also an object if it comes as array
@@ -113,6 +119,12 @@ export async function getOrCreateConversation(orgId: string, seekerId: string, j
 
         return {
             ...data,
+            id: data.id,
+            orgId: data.org_id,
+            seekerId: data.seeker_id,
+            jobId: data.job_id,
+            createdAt: data.created_at,
+            lastMessageAt: data.last_message_at,
             organization: Array.isArray(data.organizations) ? data.organizations[0] : data.organizations,
             seeker: Array.isArray(data.seeker) ? data.seeker[0] : data.seeker,
             job: Array.isArray(data.job) ? data.job[0] : data.job

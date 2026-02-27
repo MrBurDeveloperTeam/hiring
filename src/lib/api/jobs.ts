@@ -57,6 +57,7 @@ function mapJobToFrontend(job: JobRow, org: OrganizationRow | null): Job {
     description: job.description,
     salaryMin: job.salary_min || undefined,
     salaryMax: job.salary_max || undefined,
+    currency: job.currency || undefined,
     orgId: job.org_id,
     logoUrl: org?.logo_url || undefined,
     slug: job.slug || undefined,
