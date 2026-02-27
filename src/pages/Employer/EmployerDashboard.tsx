@@ -10,7 +10,7 @@ import { JobStage } from '../../lib/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { getUsersOrganizations } from '../../lib/api/organizations';
 import { getJobs, deleteJob } from '../../lib/api/jobs';
-import { ChevronsUpDown, Building2, Users } from 'lucide-react';
+import { ChevronsUpDown, Building2, Users, MessageCircle } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -133,7 +133,7 @@ export default function EmployerDashboard() {
 
   if (loading) {
     return (
-      <DashboardShell sidebarLinks={sidebarLinks} title="Employer Dashboard">
+      <DashboardShell hideNavigation sidebarLinks={[]} title="Employer Dashboard">
         <div className="flex h-96 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand border-t-transparent"></div>
         </div>
@@ -195,11 +195,18 @@ export default function EmployerDashboard() {
       subtitle="Manage postings and review applicants."
       hideNavigation
       actions={
-        <Button variant="primary" className='hover:text-white' asChild icon={<Users className="h-4 w-4" />}>
-          <Link to="/employer/team">
-            Team
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className='hover:text-brand' asChild icon={<MessageCircle className="h-4 w-4" />}>
+            <Link to="/messages">
+              Chat
+            </Link>
+          </Button>
+          <Button variant="primary" className='hover:text-white' asChild icon={<Users className="h-4 w-4" />}>
+            <Link to="/employer/team">
+              Team
+            </Link>
+          </Button>
+        </div>
       }
     >
       {/* <Breadcrumbs items={[{ label: 'Employer Home', to: '/employers' }, { label: 'Dashboard' }]} /> */}

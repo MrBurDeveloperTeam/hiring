@@ -185,7 +185,7 @@ export function JobCard({ job, onApply, isSaved, onToggleSave, onHide, isHidden,
 
           {canEdit ? (
             <Button
-              variant="outline"
+              variant="primary"
               size="sm"
               asChild
             >
@@ -197,20 +197,22 @@ export function JobCard({ job, onApply, isSaved, onToggleSave, onHide, isHidden,
               </Link>
             </Button>
           ) : (
-            <Button
-              variant={hasApplied ? "outline" : "primary"}
-              size="sm"
-              disabled={hasApplied}
-              rightIcon={hasApplied ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (!hasApplied) {
-                  onApply?.(job);
-                }
-              }}
-            >
-              {hasApplied ? 'Applied' : 'Quick apply'}
-            </Button>
+            (userRole === 'seeker' || !userRole) && (
+              <Button
+                variant={hasApplied ? "outline" : "primary"}
+                size="sm"
+                disabled={hasApplied}
+                rightIcon={hasApplied ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!hasApplied) {
+                    onApply?.(job);
+                  }
+                }}
+              >
+                {hasApplied ? 'Applied' : 'Quick apply'}
+              </Button>
+            )
           )}
         </div>
       </div>

@@ -327,72 +327,74 @@ export default function JobDetails() {
         </div>
 
         <div className="space-y-4">
-          <div className="sticky top-24 rounded-2xl border border-gray-100 bg-white p-5 shadow-card">
-            <p className="text-sm font-semibold text-gray-900">Ready to apply?</p>
-            <p className="text-sm text-gray-600">Submit your resume with screening answers.</p>
-            <div className="mt-4 flex flex-col gap-2">
-              {(!user || userRole === 'seeker') && (
-                <Button
-                  variant={hasApplied ? "outline" : "primary"}
-                  rightIcon={hasApplied ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-                  disabled={hasApplied}
-                  onClick={() => {
-                    if (hasApplied) return;
+          {(!user || userRole === 'seeker' || isOwner) && (
+            <div className="sticky top-24 rounded-2xl border border-gray-100 bg-white p-5 shadow-card">
+              <p className="text-sm font-semibold text-gray-900">Ready to apply?</p>
+              <p className="text-sm text-gray-600">Submit your resume with screening answers.</p>
+              <div className="mt-4 flex flex-col gap-2">
+                {(!user || userRole === 'seeker') && (
+                  <Button
+                    variant={hasApplied ? "outline" : "primary"}
+                    rightIcon={hasApplied ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+                    disabled={hasApplied}
+                    onClick={() => {
+                      if (hasApplied) return;
 
-                    if (!user || userRole !== 'seeker') {
-                      if (id) {
-                        openAuthModal('login', window.location.pathname);
-                      } else {
-                        openAuthModal('login', '/jobs');
+                      if (!user || userRole !== 'seeker') {
+                        if (id) {
+                          openAuthModal('login', window.location.pathname);
+                        } else {
+                          openAuthModal('login', '/jobs');
+                        }
+                        return;
                       }
-                      return;
-                    }
 
-                    setShowApply(true);
-                  }}
+                      setShowApply(true);
+                    }}
+                  >
+                    {hasApplied ? 'Applied' : 'Quick apply'}
+                  </Button>
+                )}
+
+                {isOwner ? (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="primary"
+                      onClick={() => navigate(`/employer/jobs/${job.slug}/edit`)}
+                      className="flex-1"
+                    >
+                      Edit Job
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleDeleteJob}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                      title="Delete Job"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  (userRole === 'seeker' || !user) && (
+                    <Button
+                      variant={isSaved ? "primary" : "outline"}
+                      onClick={handleToggleSave}
+                    >
+                      {isSaved ? 'Saved' : 'Save job'}
+                    </Button>
+                  )
+                )}
+
+                <Button
+                  variant="ghost"
+                  icon={<Share2 className="h-4 w-4" />}
+                  onClick={() => setShareModalOpen(true)}
                 >
-                  {hasApplied ? 'Applied' : 'Quick apply'}
+                  Share
                 </Button>
-              )}
-
-              {isOwner ? (
-                <div className="flex gap-2">
-                  <Button
-                    variant="primary"
-                    onClick={() => navigate(`/employer/jobs/${job.slug}/edit`)}
-                    className="flex-1"
-                  >
-                    Edit Job
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleDeleteJob}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                    title="Delete Job"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                (userRole === 'seeker' || !user) && (
-                  <Button
-                    variant={isSaved ? "primary" : "outline"}
-                    onClick={handleToggleSave}
-                  >
-                    {isSaved ? 'Saved' : 'Save job'}
-                  </Button>
-                )
-              )}
-
-              <Button
-                variant="ghost"
-                icon={<Share2 className="h-4 w-4" />}
-                onClick={() => setShareModalOpen(true)}
-              >
-                Share
-              </Button>
+              </div>
             </div>
-          </div>
+          )}
           <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
             <p className="text-sm font-semibold text-gray-900">About the clinic</p>
             <p className="mt-2 text-sm text-gray-700">
