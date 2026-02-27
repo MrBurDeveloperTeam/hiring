@@ -52,13 +52,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return true;
       }
     } catch (error: any) {
-      // 401 is expected for unauthenticated users
-      const isAuthError = error.message?.includes('401') ||
-        error.message?.includes('Not authenticated') ||
-        error.message?.includes('missing_sso');
-
-      if (isAuthError) {
-        console.info('SSO: No active SSO session found (visitor mode).');
+      await supabase.auth.signOut();
+      if (error.message?.includes('401') || error.message?.includes('Not authenticated') || error.message?.includes('missing_sso')) {
+        console.info('SSO: No active session found (guest user)');
       } else {
         // This is the "fail callback" scenario: worker is down or unexpected error
         console.warn('SSO: Cloudflare Worker unreachable or failed. Falling back to Supabase direct session.', error.message);
