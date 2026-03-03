@@ -80,8 +80,8 @@ export default function JobDetails() {
 
         // Fetch saved status and application status in parallel if job found
         const [savedJobs, applications] = await Promise.all([
-          user && userRole === 'seeker' ? getSavedJobs(user.id) : Promise.resolve([]),
-          user && userRole === 'seeker' && realId ? getApplications({ seeker_user_id: user.id, job_id: realId }) : Promise.resolve([])
+          user && (userRole === 'seeker' || userRole === 'admin') ? getSavedJobs(user.id) : Promise.resolve([]),
+          user && (userRole === 'seeker' || userRole === 'admin') && realId ? getApplications({ seeker_user_id: user.id, job_id: realId }) : Promise.resolve([])
         ]);
 
         setJob(jobData);
@@ -120,7 +120,7 @@ export default function JobDetails() {
   useEffect(() => {
     async function loadResumes() {
       try {
-        if (user && userRole === 'seeker') {
+        if (user && (userRole === 'seeker' || userRole === 'admin')) {
           const docs = await getUserDocuments(user.id);
           setResumes(docs);
         }
@@ -137,7 +137,7 @@ export default function JobDetails() {
 
   const handleToggleSave = async () => {
     if (!job) return;
-    if (!user || userRole !== 'seeker') {
+    if (!user || (userRole !== 'seeker' && userRole !== 'admin')) {
       if (userRole === 'employer') {
         // Employers shouldn't be clicking save, but just in case
         return;
@@ -327,18 +327,18 @@ export default function JobDetails() {
         </div>
 
         <div className="space-y-4">
-          {(!user || userRole === 'seeker' || isOwner) && (
+          {(!user || userRole === 'seeker' || userRole === 'admin' || isOwner) && (
             <div className="sticky top-24 rounded-2xl border border-gray-100 bg-white p-5 shadow-card">
               <p className="text-sm font-semibold text-gray-900">Ready to apply?</p>
               <p className="text-sm text-gray-600">Submit your resume with screening answers.</p>
               <div className="mt-4 flex flex-col gap-2">
-                {(!user || userRole === 'seeker') && (
+                {(!user || userRole === 'seeker' || userRole === 'admin') && (
                   <Button
                     variant={hasApplied ? "outline" : "primary"}
                     rightIcon={hasApplied ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-                    disabled={hasApplied}
+                    disabled={hasApplied || userRole === 'admin'}
                     onClick={() => {
-                      if (hasApplied) return;
+                      if (hasApplied || userRole === 'admin') return;
 
                       if (!user || userRole !== 'seeker') {
                         if (id) {
@@ -375,7 +375,7 @@ export default function JobDetails() {
                     </Button>
                   </div>
                 ) : (
-                  (userRole === 'seeker' || !user) && (
+                  (userRole === 'seeker' || userRole === 'admin' || !user) && (
                     <Button
                       variant={isSaved ? "primary" : "outline"}
                       onClick={handleToggleSave}

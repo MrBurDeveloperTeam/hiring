@@ -28,6 +28,7 @@ interface JobFiltersProps {
   sortBy?: string;
   onSortChange?: (value: string) => void;
   compact?: boolean;
+  isAdmin?: boolean;
 }
 
 const specialtyOptions = [
@@ -42,7 +43,7 @@ const specialtyOptions = [
 
 
 
-export function JobFilters({ values, onChange, onReset, sortBy, onSortChange, compact }: JobFiltersProps) {
+export function JobFilters({ values, onChange, onReset, sortBy, onSortChange, compact, isAdmin }: JobFiltersProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const handleChange = (field: keyof JobFilterState, value: string | boolean | number) => {
     onChange({ ...values, [field]: value });
@@ -186,6 +187,7 @@ export function JobFilters({ values, onChange, onReset, sortBy, onSortChange, co
                 <option value="relevance">Relevance</option>
                 <option value="newest">Newest</option>
                 <option value="salary">Salary</option>
+                {isAdmin && <option value="expired">Expired</option>}
               </Select>
             </div>
           )}

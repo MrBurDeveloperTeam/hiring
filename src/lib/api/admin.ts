@@ -49,3 +49,4 @@ export async function togglePlatformNote(noteId: string, isDone: boolean): Promi
     }
     return result.data;
 }
+

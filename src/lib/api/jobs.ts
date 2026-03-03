@@ -81,6 +81,7 @@ export async function getJobs(filters?: {
   country?: string;
   page?: number;
   limit?: number;
+  expired?: boolean;
 }): Promise<{ data: Job[]; count: number }> {
   const params = new URLSearchParams();
 
@@ -98,6 +99,7 @@ export async function getJobs(filters?: {
   if (filters?.country) params.set('country', filters.country);
   if (filters?.page) params.set('page', String(filters.page));
   if (filters?.limit) params.set('limit', String(filters.limit));
+  if (filters?.expired) params.set('expired', 'true');
 
   const query = params.toString();
   const path = `/api/jobs${query ? `?${query}` : ''}`;
