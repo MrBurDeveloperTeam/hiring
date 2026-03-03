@@ -58,7 +58,7 @@ export default function JobsList() {
   };
 
   const handleToggleSave = async (job: Job) => {
-    if (!user || userRole !== 'seeker') {
+    if (!user || (userRole !== 'seeker' && userRole !== 'admin')) {
       openAuthModal('login', '/jobs');
       return;
     }
@@ -97,7 +97,7 @@ export default function JobsList() {
   };
 
   const handleHideJob = async (job: Job) => {
-    if (!user || userRole !== 'seeker') {
+    if (!user || (userRole !== 'seeker' && userRole !== 'admin')) {
       openAuthModal('login', '/jobs');
       return;
     }
@@ -186,13 +186,14 @@ export default function JobsList() {
         const apiCalls: Promise<any>[] = [
           getJobs({
             status: 'published',
+            expired: sortBy === 'expired' ? true : undefined,
             page,
             limit: pageSize,
             ...filters
           })
         ];
 
-        if (user && userRole === 'seeker') {
+        if (user && (userRole === 'seeker' || userRole === 'admin')) {
           apiCalls.push(getSavedJobs(user.id));
           apiCalls.push(getHiddenJobIds(user.id));
           apiCalls.push(getUserDocuments(user.id));
@@ -211,7 +212,7 @@ export default function JobsList() {
         // Since totalPages is derived, we need a state for it if it comes from server
         // Let's add setTotalPages state
 
-        if (userRole === 'seeker') {
+        if (userRole === 'seeker' || userRole === 'admin') {
           if (results[1]) setSavedJobIds(new Set(results[1].map((j: any) => j.id)));
           if (results[2]) setHiddenJobIds(new Set(results[2]));
           if (results[3]) setResumes(results[3]);
@@ -246,7 +247,7 @@ export default function JobsList() {
     loadData().then(count => {
       setTotalCount(count);
     });
-  }, [user?.id, userRole, filters, page]); // Depend on filters and page to trigger refetch
+  }, [user?.id, userRole, filters, page, sortBy]); // Depend on filters and page to trigger refetch
 
   // Removed filteredJobs useMemo as filtering is server-side
 
@@ -286,6 +287,7 @@ export default function JobsList() {
           onReset={resetFilters}
           sortBy={sortBy}
           onSortChange={setSortBy}
+          isAdmin={userRole === 'admin'}
         />
 
         <div className="grid gap-4">

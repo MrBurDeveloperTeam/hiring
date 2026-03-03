@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import SeekersLanding from './pages/Marketing/SeekersLanding';
 import EmployersLanding from './pages/Marketing/EmployersLanding';
 import JobsList from './pages/Jobs/JobsList';
@@ -11,6 +11,7 @@ import ApplicantsPipeline from './pages/Employer/ApplicantsPipeline';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 import OrganizationsList from './pages/Admin/OrganizationsList';
 import AdminProfile from './pages/Admin/AdminProfile';
+import AdminSavedJobs from './pages/Admin/AdminSavedJobs';
 import About from './pages/Marketing/About';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthModal } from './components/AuthModal';
@@ -100,8 +101,6 @@ function App() {
           }
         />
         <Route
-        />
-        <Route
           path="/employer/organization"
           element={
             <ProtectedRoute requiredRole="employer">
@@ -137,26 +136,15 @@ function App() {
           path="/admin"
           element={
             <ProtectedRoute requiredRole="admin">
-              <AdminDashboard />
+              <Outlet />
             </ProtectedRoute>
           }
-        />
-        <Route
-          path="/admin/organizations"
-          element={
-            <ProtectedRoute requiredRole="admin">
-              <OrganizationsList />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/profile"
-          element={
-            <ProtectedRoute requiredRole="admin">
-              <AdminProfile />
-            </ProtectedRoute>
-          }
-        />
+        >
+          <Route index element={<AdminDashboard />} />
+          <Route path="saved-jobs" element={<AdminSavedJobs />} />
+          <Route path="organizations" element={<OrganizationsList />} />
+          <Route path="profile" element={<AdminProfile />} />
+        </Route>
 
         <Route path="/organizations/:orgName" element={<PublicOrganizationProfile />} />
         <Route path="/seekers/:id" element={<SeekerPublicProfile />} />

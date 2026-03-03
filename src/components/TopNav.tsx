@@ -80,6 +80,7 @@ export function TopNav() {
       return [
         { to: '/admin', label: 'Overview', icon: <LayoutDashboard className="h-4 w-4" />, end: true },
         { to: '/jobs', label: 'Job Board', icon: <Briefcase className="h-4 w-4" /> },
+        { to: '/admin/saved-jobs', label: 'Saved Jobs', icon: <Briefcase className="h-4 w-4" /> },
         { to: '/admin/organizations', label: 'Organizations', icon: <Building2Icon className="h-4 w-4" /> },
         { to: '/admin/profile', label: 'Profile', icon: <User2 className="h-4 w-4" /> }
       ];

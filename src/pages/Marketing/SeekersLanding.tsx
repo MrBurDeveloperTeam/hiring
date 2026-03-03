@@ -88,29 +88,106 @@ export default function SeekersLanding() {
     }
   };
 
-  // ... (existing toggle save logic) ...
-
   const handleToggleSave = async (job: Job) => {
-    // ...
-  };
+    if (!user || (userRole !== 'seeker' && userRole !== 'admin')) {
+      openAuthModal('login', '/jobs');
+      return;
+    }
 
-  // ... (existing hide logic) ...
+    const isSaved = savedJobIds.has(job.id);
+    // Optimistic update
+    setSavedJobIds(prev => {
+      const next = new Set(prev);
+      if (isSaved) next.delete(job.id);
+      else next.add(job.id);
+      return next;
+    });
+
+    try {
+      if (isSaved) {
+        await unsaveJob(user.id, job.id);
+        setToastMessage('Job removed from saved');
+        setToastOpen(true);
+      } else {
+        await saveJob(user.id, job.id);
+        setToastMessage('Job saved successfully');
+        setToastOpen(true);
+      }
+    } catch (error) {
+      console.error('Error toggling save:', error);
+      // Revert on error
+      setSavedJobIds(prev => {
+        const next = new Set(prev);
+        if (isSaved) next.add(job.id);
+        else next.delete(job.id);
+        return next;
+      });
+      setToastMessage('Failed to update saved status');
+      setToastOpen(true);
+    }
+  };
 
   const handleHideJob = async (job: Job) => {
-    // ...
+    if (!user || (userRole !== 'seeker' && userRole !== 'admin')) {
+      openAuthModal('login', '/jobs');
+      return;
+    }
+
+    // Optimistic update: Add to both hidden and undoable
+    setHiddenJobIds(prev => new Set(prev).add(job.id));
+    setUndoableJobIds(prev => new Set(prev).add(job.id));
+
+    try {
+      await hideJob(user.id, job.id);
+      // No toast needed as the UI updates in-place
+    } catch (error) {
+      console.error('Error hiding job:', error);
+      // Revert
+      setHiddenJobIds(prev => {
+        const next = new Set(prev);
+        next.delete(job.id);
+        return next;
+      });
+      setUndoableJobIds(prev => {
+        const next = new Set(prev);
+        next.delete(job.id);
+        return next;
+      });
+      setToastMessage('Failed to hide job');
+      setToastOpen(true);
+    }
   };
 
-  // ... (existing undo hide logic) ...
-
   const handleUndoHide = async (job: Job) => {
-    // ...
+    // Optimistic revert
+    setHiddenJobIds(prev => {
+      const next = new Set(prev);
+      next.delete(job.id);
+      return next;
+    });
+    setUndoableJobIds(prev => {
+      const next = new Set(prev);
+      next.delete(job.id);
+      return next;
+    });
+
+    try {
+      await unhideJob(user.id, job.id);
+    } catch (error) {
+      console.error('Error undoing hide:', error);
+      // Revert the revert if failed (re-hide)
+      setHiddenJobIds(prev => new Set(prev).add(job.id));
+      setUndoableJobIds(prev => new Set(prev).add(job.id));
+      setToastMessage('Failed to undo hide');
+      setToastOpen(true);
+    }
   };
 
   useEffect(() => {
     async function loadSavedJobsData() {
       if (user) {
         try {
-          if (userRole === 'seeker') {
+          if (userRole === 'seeker' || userRole === 'admin') {
             const [saved, hidden, applications, userResumes] = await Promise.all([
               getSavedJobs(user.id),
               getHiddenJobIds(user.id),

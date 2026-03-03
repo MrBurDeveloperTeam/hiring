@@ -197,15 +197,15 @@ export function JobCard({ job, onApply, isSaved, onToggleSave, onHide, isHidden,
               </Link>
             </Button>
           ) : (
-            (userRole === 'seeker' || !userRole) && (
+            (userRole === 'seeker' || !userRole || userRole === 'admin') && (
               <Button
                 variant={hasApplied ? "outline" : "primary"}
                 size="sm"
-                disabled={hasApplied}
+                disabled={hasApplied || userRole === 'admin'}
                 rightIcon={hasApplied ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
                 onClick={(event) => {
                   event.stopPropagation();
-                  if (!hasApplied) {
+                  if (!hasApplied && userRole !== 'admin') {
                     onApply?.(job);
                   }
                 }}
