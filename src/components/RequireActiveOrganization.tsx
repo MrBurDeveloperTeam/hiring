@@ -33,7 +33,7 @@ export function RequireActiveOrganization({ children }: RequireActiveOrganizatio
                 console.log("RequireActiveOrganization check:", { orgs, storedOrgId });
 
                 if (storedOrgId && orgs) {
-                    current = orgs.find(o => o.id === storedOrgId);
+                    current = orgs.find((o: any) => o.id === storedOrgId);
                 }
 
                 // If no stored org but we have orgs, typically dashboard picks first. 
