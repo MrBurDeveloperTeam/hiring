@@ -5,7 +5,10 @@ import { Input } from './ui/input';
 import { PasswordInput } from './ui/PasswordInput';
 import { Modal } from './ui/modal';
 import { Toast } from './ui/toast';
+import { Checkbox } from './ui/checkbox';
 import { useAuth } from '../contexts/AuthContext';
+
+const SAVED_EMAIL_KEY = 'hiring-saved-email';
 
 export function AuthModal() {
   const {
@@ -29,9 +32,15 @@ export function AuthModal() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
 
   useEffect(() => {
-    if (!authModalOpen) {
+    if (authModalOpen) {
+      const savedEmail = localStorage.getItem(SAVED_EMAIL_KEY);
+      if (savedEmail && authModalMode === 'login') {
+        setEmail(savedEmail);
+      }
+    } else {
       setEmail('');
       setPassword('');
       setFullName('');
@@ -42,8 +51,9 @@ export function AuthModal() {
       setError(null);
       setLoading(false);
       setShowSuccessToast(false);
+      setRememberMe(true);
     }
-  }, [authModalOpen]);
+  }, [authModalOpen, authModalMode]);
 
   const handleClose = () => {
     closeAuthModal();
@@ -66,11 +76,18 @@ export function AuthModal() {
     setLoading(true);
     setError(null);
 
-    const { error: authError, role: loggedRole } = await signIn(email, password);
+    const { error: authError, role: loggedRole } = await signIn(email, password, rememberMe);
     if (authError) {
       setError(authError.message);
       setLoading(false);
       return;
+    }
+
+    // Save or clear remembered email
+    if (rememberMe) {
+      localStorage.setItem(SAVED_EMAIL_KEY, email);
+    } else {
+      localStorage.removeItem(SAVED_EMAIL_KEY);
     }
 
     setShowSuccessToast(true);
@@ -154,6 +171,14 @@ export function AuthModal() {
               onChange={(event) => setPassword(event.target.value)}
               required
             />
+            {authModalMode === 'login' && (
+              <Checkbox
+                label="Remember me"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="border-none p-0 bg-transparent"
+              />
+            )}
             {/* Clinic fields removed for decoupled signup */}
 
             {authModalMode === 'register' && (
