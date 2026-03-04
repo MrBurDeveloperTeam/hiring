@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Session, User, AuthError } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { supabase, setRememberMePreference } from '../lib/supabase';
 import { Database } from '../lib/database.types';
 import { workerPostPublic } from '../lib/api/apiClient';
 import { api } from '../lib/api/api';
@@ -21,7 +21,7 @@ interface AuthContextType {
   // Methods
   openAuthModal: (mode: 'login' | 'register', redirectPath?: string) => void;
   closeAuthModal: () => void;
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | null; role: UserRole | null }>;
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<{ error: AuthError | null; role: UserRole | null }>;
   signUp: (email: string, password: string, fullName: string, role: 'seeker' | 'employer', metadata?: any) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
 }
@@ -148,7 +148,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthModalRedirectPath(undefined);
   };
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, rememberMe: boolean = true) => {
+    // Set the preference BEFORE signing in
+    setRememberMePreference(rememberMe);
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
